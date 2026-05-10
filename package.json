@@ -1,0 +1,13 @@
+{
+  "name": "teaching-material",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Wiki of interactive teaching materials.",
+  "scripts": {
+    "generate": "node generate-index.js",
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7"
+  }
+}

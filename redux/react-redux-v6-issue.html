@@ -1,0 +1,972 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>React-Redux v6: The Performance Problem</title>
+    <meta name="description" content="Why React-Redux v6's context-based design caused performance issues and led to the v7 rewrite.">
+
+    <script>
+      (() => {
+        const param = new URLSearchParams(window.location.search).get(
+          "clawpilotTheme",
+        );
+        const theme =
+          param ||
+          (window.matchMedia("(prefers-color-scheme: dark)").matches
+            ? "dark"
+            : "light");
+        document.documentElement.setAttribute("data-theme", theme);
+      })();
+    </script>
+    <style>
+      :root {
+        color-scheme: light;
+        --cp-bg: #f7f4ef;
+        --cp-bg-elevated: #fcfbf8;
+        --cp-surface: #ffffff;
+        --cp-surface-soft: #f5f5f5;
+        --cp-border: #dedede;
+        --cp-border-strong: #919191;
+        --cp-text: #242424;
+        --cp-text-muted: #5c5c5c;
+        --cp-text-soft: #6f6f6f;
+        --cp-accent: #b11f4b;
+        --cp-accent-hover: #9a1a41;
+        --cp-accent-soft: rgba(177, 31, 75, 0.08);
+        --cp-accent-fg: #ffffff;
+        --cp-success: #16a34a;
+        --cp-danger: #dc2626;
+        --cp-warning: #f59e0b;
+        --cp-link: #0078d4;
+        --cp-shadow: 0 18px 48px rgba(0, 0, 0, 0.12);
+        --cp-overlay: rgba(255, 255, 255, 0.8);
+        --cp-panel: rgba(255, 255, 255, 0.86);
+        --cp-panel-strong: rgba(255, 255, 255, 0.96);
+        --cp-sheen: rgba(255, 255, 255, 0.55);
+        --cp-highlight: rgba(177, 31, 75, 0.12);
+      }
+      html[data-theme="dark"] {
+        color-scheme: dark;
+        --cp-bg: #3d3b3a;
+        --cp-bg-elevated: #343231;
+        --cp-surface: #292929;
+        --cp-surface-soft: #2e2e2e;
+        --cp-border: #474747;
+        --cp-border-strong: #5f5f5f;
+        --cp-text: #dedede;
+        --cp-text-muted: #919191;
+        --cp-text-soft: #b0b0b0;
+        --cp-accent: #fd8ea1;
+        --cp-accent-hover: #fb7b91;
+        --cp-accent-soft: rgba(253, 142, 161, 0.14);
+        --cp-accent-fg: #1a1a1a;
+        --cp-success: #4ade80;
+        --cp-danger: #f87171;
+        --cp-warning: #fbbf24;
+        --cp-link: #4da6ff;
+        --cp-shadow: 0 18px 48px rgba(0, 0, 0, 0.32);
+        --cp-overlay: rgba(41, 41, 41, 0.88);
+        --cp-panel: rgba(41, 41, 41, 0.72);
+        --cp-panel-strong: rgba(41, 41, 41, 0.96);
+        --cp-sheen: rgba(255, 255, 255, 0.04);
+        --cp-highlight: rgba(253, 142, 161, 0.12);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background: var(--cp-bg);
+        color: var(--cp-text);
+        font-family:
+          "Segoe UI",
+          Aptos,
+          Calibri,
+          -apple-system,
+          BlinkMacSystemFont,
+          sans-serif;
+        line-height: 1.6;
+      }
+      .wrap {
+        max-width: 1080px;
+        margin: 0 auto;
+        padding: 48px 24px 96px;
+      }
+      header {
+        margin-bottom: 32px;
+        border-bottom: 1px solid var(--cp-border);
+        padding-bottom: 24px;
+      }
+      .eyebrow {
+        color: var(--cp-accent);
+        font-size: 0.85rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+      h1 {
+        font-size: 2.25rem;
+        margin: 8px 0 12px;
+        line-height: 1.2;
+      }
+      h2 {
+        font-size: 1.5rem;
+        margin: 40px 0 16px;
+        border-left: 4px solid var(--cp-accent);
+        padding-left: 12px;
+      }
+      h3 {
+        font-size: 1.1rem;
+        margin: 20px 0 8px;
+        color: var(--cp-text);
+      }
+      p,
+      li {
+        color: var(--cp-text);
+      }
+      .lede {
+        color: var(--cp-text-muted);
+        font-size: 1.05rem;
+      }
+
+      .card {
+        background: var(--cp-surface);
+        border: 1px solid var(--cp-border);
+        border-radius: 16px;
+        padding: 24px;
+        box-shadow:
+          0 0 2px rgba(0, 0, 0, 0.12),
+          0 1px 2px rgba(0, 0, 0, 0.14);
+        margin: 16px 0;
+      }
+      .grid-2 {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+      }
+      @media (max-width: 760px) {
+        .grid-2 {
+          grid-template-columns: 1fr;
+        }
+      }
+      .tag {
+        display: inline-block;
+        padding: 2px 10px;
+        border-radius: 999px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        margin-right: 6px;
+      }
+      .tag.bad {
+        background: rgba(220, 38, 38, 0.12);
+        color: var(--cp-danger);
+      }
+      .tag.good {
+        background: rgba(22, 163, 74, 0.12);
+        color: var(--cp-success);
+      }
+      .tag.warn {
+        background: rgba(245, 158, 11, 0.14);
+        color: var(--cp-warning);
+      }
+
+      pre,
+      code {
+        font-family: Consolas, "Courier New", Courier, monospace;
+      }
+      pre {
+        background: var(--cp-surface-soft);
+        border: 1px solid var(--cp-border);
+        border-radius: 10px;
+        padding: 14px 16px;
+        overflow-x: auto;
+        font-size: 0.85rem;
+      }
+      code {
+        font-size: 0.9em;
+      }
+      p code,
+      li code {
+        background: var(--cp-surface-soft);
+        padding: 1px 6px;
+        border-radius: 6px;
+        border: 1px solid var(--cp-border);
+      }
+
+      /* ----- Diagrams ----- */
+      .diagram {
+        background: var(--cp-bg-elevated);
+        border: 1px solid var(--cp-border);
+        border-radius: 16px;
+        padding: 28px;
+        margin: 16px 0;
+      }
+      .diagram h4 {
+        margin: 0 0 16px;
+        font-size: 1rem;
+        color: var(--cp-text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        font-weight: 600;
+      }
+
+      /* Tree */
+      .tree {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0;
+      }
+      .tree-row {
+        display: flex;
+        gap: 28px;
+        justify-content: center;
+        align-items: flex-start;
+        position: relative;
+        padding-top: 24px;
+      }
+      .tree-row.first {
+        padding-top: 0;
+      }
+      .node {
+        background: var(--cp-surface);
+        border: 2px solid var(--cp-border);
+        border-radius: 10px;
+        padding: 10px 14px;
+        min-width: 110px;
+        text-align: center;
+        font-weight: 600;
+        font-size: 0.9rem;
+        position: relative;
+        transition: all 0.2s ease;
+      }
+      .node small {
+        display: block;
+        font-weight: 400;
+        font-size: 0.7rem;
+        color: var(--cp-text-soft);
+        margin-top: 2px;
+      }
+      .node.store {
+        background: var(--cp-accent);
+        color: var(--cp-accent-fg);
+        border-color: var(--cp-accent);
+      }
+      .node.connected {
+        border-color: var(--cp-accent);
+      }
+      .node.rerender {
+        background: rgba(220, 38, 38, 0.12);
+        border-color: var(--cp-danger);
+        color: var(--cp-danger);
+        animation: pulse 1.4s ease-in-out infinite;
+      }
+      .node.skip {
+        opacity: 0.55;
+        border-style: dashed;
+      }
+      .node.fine {
+        background: rgba(22, 163, 74, 0.1);
+        border-color: var(--cp-success);
+        color: var(--cp-success);
+      }
+      @keyframes pulse {
+        0%,
+        100% {
+          transform: scale(1);
+          box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.4);
+        }
+        50% {
+          transform: scale(1.04);
+          box-shadow: 0 0 0 8px rgba(220, 38, 38, 0);
+        }
+      }
+      /* connectors */
+      .tree-row::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 50%;
+        width: 2px;
+        height: 24px;
+        background: var(--cp-border-strong);
+      }
+      .tree-row.first::before {
+        display: none;
+      }
+      .branch {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0;
+        position: relative;
+      }
+      .branch-children {
+        display: flex;
+        gap: 24px;
+        padding-top: 24px;
+        position: relative;
+      }
+      .branch-children::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 10%;
+        right: 10%;
+        height: 2px;
+        background: var(--cp-border-strong);
+      }
+      .branch-children .node::before {
+        content: "";
+        position: absolute;
+        top: -24px;
+        left: 50%;
+        width: 2px;
+        height: 24px;
+        background: var(--cp-border-strong);
+      }
+
+      /* Flow arrows v6 vs v7 */
+      .flow {
+        display: grid;
+        grid-template-columns: auto 1fr auto 1fr auto 1fr;
+        gap: 12px;
+        align-items: center;
+        margin: 12px 0;
+      }
+      .flow-box {
+        background: var(--cp-surface);
+        border: 1px solid var(--cp-border);
+        border-radius: 10px;
+        padding: 10px 14px;
+        text-align: center;
+        font-size: 0.85rem;
+        font-weight: 600;
+      }
+      .arrow {
+        color: var(--cp-accent);
+        font-weight: 700;
+        font-size: 1.4rem;
+      }
+
+      .legend {
+        display: flex;
+        gap: 18px;
+        flex-wrap: wrap;
+        margin-top: 16px;
+        font-size: 0.8rem;
+        color: var(--cp-text-muted);
+      }
+      .legend-dot {
+        display: inline-block;
+        width: 12px;
+        height: 12px;
+        border-radius: 4px;
+        margin-right: 6px;
+        vertical-align: middle;
+        border: 2px solid;
+      }
+      .ld-rerender {
+        background: rgba(220, 38, 38, 0.12);
+        border-color: var(--cp-danger);
+      }
+      .ld-skip {
+        background: var(--cp-surface);
+        border-color: var(--cp-border);
+        border-style: dashed;
+      }
+      .ld-fine {
+        background: rgba(22, 163, 74, 0.1);
+        border-color: var(--cp-success);
+      }
+      .ld-connected {
+        background: var(--cp-surface);
+        border-color: var(--cp-accent);
+      }
+
+      .controls {
+        display: flex;
+        gap: 8px;
+        margin: 12px 0 20px;
+        flex-wrap: wrap;
+      }
+      button.cp-btn {
+        background: var(--cp-accent);
+        color: var(--cp-accent-fg);
+        border: none;
+        border-radius: 10px;
+        padding: 10px 18px;
+        font-weight: 600;
+        cursor: pointer;
+        font-family: inherit;
+        font-size: 0.9rem;
+        transition: background 0.15s ease;
+      }
+      button.cp-btn:hover {
+        background: var(--cp-accent-hover);
+      }
+      button.cp-btn.ghost {
+        background: transparent;
+        color: var(--cp-text);
+        border: 1px solid var(--cp-border-strong);
+      }
+      button.cp-btn.ghost:hover {
+        background: var(--cp-surface-soft);
+      }
+
+      .callout {
+        border-left: 4px solid var(--cp-accent);
+        background: var(--cp-accent-soft);
+        padding: 14px 18px;
+        border-radius: 0 10px 10px 0;
+        margin: 16px 0;
+      }
+      .callout strong {
+        color: var(--cp-accent);
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 12px 0;
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--cp-border);
+        font-size: 0.92rem;
+      }
+      th {
+        background: var(--cp-surface-soft);
+        font-weight: 600;
+        color: var(--cp-text-muted);
+        font-size: 0.78rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+
+      .theme-toggle {
+        position: fixed;
+        top: 16px;
+        right: 16px;
+        background: var(--cp-surface);
+        border: 1px solid var(--cp-border);
+        border-radius: 10px;
+        padding: 8px 14px;
+        cursor: pointer;
+        font-family: inherit;
+        color: var(--cp-text);
+        font-size: 0.85rem;
+      }
+    </style>
+  </head>
+  <body>
+    <button class="theme-toggle" id="themeToggle">Toggle theme</button>
+
+    <div class="wrap">
+      <header>
+        <div class="eyebrow">React-Redux · Performance Deep-Dive</div>
+        <h1>Why React-Redux v6 Was Slower Than v5 (and v7 Fixed It)</h1>
+        <p class="lede">
+          React-Redux v6 was a bold rewrite built on the brand-new React Context
+          API. On paper it looked cleaner — in practice, it broke the
+          performance trick that made v5 fast, and introduced a render-cascade
+          problem that v7 had to undo.
+        </p>
+      </header>
+
+      <h2>1. The big idea behind v6</h2>
+      <p>
+        React 16.3 introduced the new <code>Context</code> API. The React-Redux
+        team rewrote v6 to put the entire Redux store <em>inside</em> a React
+        Context value. Every <code>connect()</code>ed component would simply
+        <code>useContext</code> (or <code>contextType</code>) to read state.
+      </p>
+
+      <div class="callout">
+        <strong>The dream:</strong> use only React's official primitives, get
+        concurrent-mode safety for free, and remove the legacy
+        <code>subscribe()</code>-and-<code>forceUpdate()</code> machinery.
+      </div>
+
+      <h2>2. How v5 worked (the "fast" version)</h2>
+      <p>
+        In v5, every <code>connect()</code> wrapper subscribed
+        <strong>directly</strong> to the Redux store. When an action dispatched,
+        each connected component ran its own <code>mapStateToProps</code>,
+        shallow-compared the result, and
+        <strong>only re-rendered if its slice actually changed</strong>. Parent
+        components were not involved.
+      </p>
+
+      <div class="diagram">
+        <h4>v5 — direct subscriptions, surgical updates</h4>
+        <div class="flow">
+          <div
+            class="flow-box"
+            style="
+              background: var(--cp-accent);
+              color: var(--cp-accent-fg);
+              border-color: var(--cp-accent);
+            "
+          >
+            Store dispatch
+          </div>
+          <div class="arrow">→</div>
+          <div class="flow-box">Each connect() subscriber runs mapState</div>
+          <div class="arrow">→</div>
+          <div class="flow-box">Shallow compare</div>
+          <div class="arrow">→</div>
+          <div
+            class="flow-box"
+            style="border-color: var(--cp-success); color: var(--cp-success)"
+          >
+            Only changed components re-render
+          </div>
+        </div>
+      </div>
+
+      <h2>3. How v6 worked (and why it hurt)</h2>
+      <p>
+        In v6, the store was passed through <code>Context.Provider</code>. When
+        the store updated, the Provider's <code>value</code> changed. React
+        Context has one fundamental rule:
+      </p>
+
+      <div class="callout">
+        <strong
+          >Any consumer of a context re-renders whenever the Provider's value
+          changes — there is no way to opt out.</strong
+        >
+      </div>
+
+      <p>
+        That meant every connected component got woken up on
+        <em>every</em> dispatch, even if its slice of state hadn't changed. The
+        shallow-equality check was still there, but it ran <em>after</em> React
+        had already scheduled the render through the entire tree.
+      </p>
+
+      <h3>Live demo: dispatch a "user.lastSeen" tick</h3>
+      <p class="lede" style="font-size: 0.9rem">
+        Imagine a tree of 7 connected components. Only
+        <code>&lt;LastSeen/&gt;</code>
+        cares about the changing field. Click a button to see what each version
+        does.
+      </p>
+
+      <div class="controls">
+        <button class="cp-btn" id="runV5">▶ Simulate v5 dispatch</button>
+        <button class="cp-btn" id="runV6">▶ Simulate v6 dispatch</button>
+        <button class="cp-btn ghost" id="resetTree">Reset</button>
+      </div>
+
+      <div class="diagram">
+        <h4 id="treeLabel">Component tree (idle)</h4>
+        <div class="tree" id="tree">
+          <div class="tree-row first">
+            <div class="node store">
+              Redux Store<small>dispatch(tick)</small>
+            </div>
+          </div>
+          <div class="tree-row">
+            <div class="node connected" data-id="App">
+              &lt;App/&gt;<small>connected</small>
+            </div>
+          </div>
+          <div class="tree-row">
+            <div class="branch">
+              <div class="branch-children">
+                <div class="node connected" data-id="Header">
+                  &lt;Header/&gt;<small>connected</small>
+                </div>
+                <div class="node connected" data-id="Sidebar">
+                  &lt;Sidebar/&gt;<small>connected</small>
+                </div>
+                <div class="node connected" data-id="Main">
+                  &lt;Main/&gt;<small>connected</small>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="tree-row">
+            <div class="branch">
+              <div class="branch-children">
+                <div class="node connected" data-id="Avatar">
+                  &lt;Avatar/&gt;<small>connected</small>
+                </div>
+                <div class="node connected" data-id="LastSeen">
+                  &lt;LastSeen/&gt;<small>uses lastSeen</small>
+                </div>
+                <div class="node connected" data-id="Cart">
+                  &lt;Cart/&gt;<small>connected</small>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="legend">
+          <span
+            ><span class="legend-dot ld-connected"></span>connected, idle</span
+          >
+          <span
+            ><span class="legend-dot ld-rerender"></span>re-rendered (work
+            happened)</span
+          >
+          <span><span class="legend-dot ld-skip"></span>skipped (no work)</span>
+          <span
+            ><span class="legend-dot ld-fine"></span>actually needed
+            update</span
+          >
+        </div>
+
+        <p
+          id="renderCount"
+          style="
+            margin-top: 16px;
+            font-weight: 600;
+            color: var(--cp-text-muted);
+          "
+        >
+          Renders this dispatch: <span id="count">0</span>
+        </p>
+      </div>
+
+      <h2>4. The real problem: the "context cascade"</h2>
+      <p>
+        Because Context updates flow top-down through the React tree, v6 had to
+        re-render parents <em>before</em> their children — even if the parent
+        didn't care about the change. Three secondary problems fell out of this:
+      </p>
+
+      <div class="grid-2">
+        <div class="card">
+          <span class="tag bad">Problem</span>
+          <h3>1. Wasted work in every parent</h3>
+          <p>
+            In a deep tree, dispatching a single action could wake up
+            <em>dozens</em> of connected ancestors that ultimately bailed out
+            via shallow equality — but only after React had already started
+            reconciling them.
+          </p>
+        </div>
+        <div class="card">
+          <span class="tag bad">Problem</span>
+          <h3>2. Stale-props bug ("zombie children")</h3>
+          <p>
+            Because parents re-rendered first, a child could receive props
+            derived from <em>old</em> state at the moment it tried to read
+            <em>new</em> state from context — throwing errors when the data it
+            needed had just been deleted.
+          </p>
+        </div>
+        <div class="card">
+          <span class="tag bad">Problem</span>
+          <h3>3. No <code>{ pure: false }</code> escape hatch</h3>
+          <p>
+            v5 let you opt connected components out of the parent re-render
+            requirement. v6 couldn't honor that — Context dictates the order.
+          </p>
+        </div>
+        <div class="card">
+          <span class="tag bad">Problem</span>
+          <h3>4. Slower than v5 in benchmarks</h3>
+          <p>
+            Mark Erikson's own benchmarks showed v6 was meaningfully slower than
+            v5 on real apps — the opposite of what a rewrite is supposed to
+            deliver.
+          </p>
+        </div>
+      </div>
+
+      <h2>5. How v7 fixed it</h2>
+      <p>
+        v7 kept the Context idea — but only used it to
+        <strong>pass the store reference</strong>, not the state itself. The old
+        subscription model came back, hidden behind hooks
+        (<code>useSelector</code>, <code>useDispatch</code>).
+      </p>
+
+      <div class="diagram">
+        <h4>v7 — context delivers the store, subscriptions deliver updates</h4>
+        <div class="flow">
+          <div
+            class="flow-box"
+            style="
+              background: var(--cp-accent);
+              color: var(--cp-accent-fg);
+              border-color: var(--cp-accent);
+            "
+          >
+            Store dispatch
+          </div>
+          <div class="arrow">→</div>
+          <div class="flow-box">
+            Each useSelector subscriber runs its selector
+          </div>
+          <div class="arrow">→</div>
+          <div class="flow-box">Reference equality check</div>
+          <div class="arrow">→</div>
+          <div
+            class="flow-box"
+            style="border-color: var(--cp-success); color: var(--cp-success)"
+          >
+            Only changed components re-render
+          </div>
+        </div>
+        <p
+          style="
+            margin-top: 14px;
+            color: var(--cp-text-muted);
+            font-size: 0.9rem;
+          "
+        >
+          Plus a subscription tree that walks parents → children in the right
+          order, eliminating the stale-props / zombie-child class of bugs.
+        </p>
+      </div>
+
+      <h2>6. Side-by-side summary</h2>
+
+      <table>
+        <thead>
+          <tr>
+            <th></th>
+            <th>v5</th>
+            <th>v6</th>
+            <th>v7+</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>How updates propagate</td>
+            <td>Direct store <code>subscribe()</code></td>
+            <td><code>Context.Provider</code> value change</td>
+            <td>Direct subscribe + Context for store ref</td>
+          </tr>
+          <tr>
+            <td>Components woken per dispatch</td>
+            <td><span class="tag good">Only subscribers</span></td>
+            <td><span class="tag bad">Every connected ancestor</span></td>
+            <td><span class="tag good">Only subscribers</span></td>
+          </tr>
+          <tr>
+            <td>Stale-props / zombie bug</td>
+            <td>No</td>
+            <td><span class="tag bad">Yes</span></td>
+            <td>Mitigated via subscription ordering</td>
+          </tr>
+          <tr>
+            <td>Hooks API</td>
+            <td>—</td>
+            <td>—</td>
+            <td><code>useSelector</code> / <code>useDispatch</code></td>
+          </tr>
+          <tr>
+            <td>Benchmark vs v5</td>
+            <td>baseline</td>
+            <td><span class="tag bad">Slower</span></td>
+            <td><span class="tag good">Faster</span></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>7. The takeaway for your class</h2>
+
+      <div class="callout">
+        <strong
+          >React Context is a notification system, not a state-management
+          system.</strong
+        >
+        Any consumer re-renders on <em>every</em> value change — there is no
+        fine-grained subscription. If you put frequently-changing state into
+        Context, every consumer in the tree pays the cost. This is precisely the
+        trap React-Redux v6 fell into, and why libraries like Redux, Zustand,
+        Jotai, and Valtio all bypass Context for the actual state delivery.
+      </div>
+
+      <h2>8. Were there official benchmarks?</h2>
+      <p>
+        Yes — Mark Erikson (React-Redux maintainer) set up a dedicated
+        <a
+          href="https://github.com/reduxjs/react-redux-benchmarks"
+          style="color: var(--cp-link)"
+        >
+          reduxjs/react-redux-benchmarks</a
+        >
+        repo to compare versions head-to-head while v6 was being developed. Here
+        are the actual reported numbers.
+      </p>
+
+      <div class="card">
+        <span class="tag warn"
+          >From the v6 PR final benchmark run (PR #1000)</span
+        >
+        <ul>
+          <li>
+            Both the WIP and final v6 builds were
+            <strong>slower than v5 in <em>every</em> benchmark scenario</strong
+            >.
+          </li>
+          <li>
+            The final v6 build was the fastest of the v6 attempts, but still
+            behind v5.
+          </li>
+          <li>
+            <strong>~20% slower</strong> in the worst case: a flat tree of many
+            rapidly-updating connected components.
+          </li>
+          <li>
+            <strong>~2% slower</strong> in deeper trees with more typical update
+            patterns.
+          </li>
+        </ul>
+        <p
+          style="
+            font-size: 0.85rem;
+            color: var(--cp-text-muted);
+            margin-bottom: 0;
+          "
+        >
+          Erikson's caveat: these are <em>artificial stress-test</em> benchmarks
+          designed to push every version to its limits — they're a relative
+          comparison, not a real-app measurement.
+        </p>
+      </div>
+
+      <div class="card">
+        <span class="tag bad">After v6 shipped</span>
+        <p style="margin: 0">
+          Real users reported "noticeable slowdowns in various scenarios" (<a
+            href="https://github.com/reduxjs/react-redux/issues/1164"
+            style="color: var(--cp-link)"
+            >issue #1164</a
+          >), which is what triggered the v7 roadmap (<a
+            href="https://github.com/reduxjs/react-redux/issues/1177"
+            style="color: var(--cp-link)"
+            >issue #1177</a
+          >). Dan Abramov and Sebastian Markbage from the React team explicitly
+          told the React-Redux maintainers to
+          <strong>go back to direct store subscriptions</strong> and use
+          <code>unstable_batchedUpdates()</code> — which is what v7 did.
+        </p>
+      </div>
+
+      <p
+        style="color: var(--cp-text-muted); font-size: 0.9rem; margin-top: 32px"
+      >
+        Sources: Mark Erikson,
+        <em
+          >"Idiomatic Redux: The History and Implementation of React-Redux"</em
+        >
+        (<a
+          href="https://blog.isquaredsoftware.com/2018/11/react-redux-history-implementation/"
+          style="color: var(--cp-link)"
+          >blog.isquaredsoftware.com</a
+        >),
+        <a
+          href="https://github.com/reduxjs/react-redux/pull/1000#issuecomment-436140264"
+          style="color: var(--cp-link)"
+          >PR #1000 benchmark comment</a
+        >, React-Redux GitHub issues
+        <a
+          href="https://github.com/reduxjs/react-redux/issues/1164"
+          style="color: var(--cp-link)"
+          >#1164</a
+        >
+        and
+        <a
+          href="https://github.com/reduxjs/react-redux/issues/1177"
+          style="color: var(--cp-link)"
+          >#1177</a
+        >, and React issue
+        <a
+          href="https://github.com/facebook/react/issues/13739"
+          style="color: var(--cp-link)"
+          >facebook/react#13739</a
+        >
+        (Context value propagation performance).
+      </p>
+    </div>
+
+    <script>
+      const tree = document.getElementById("tree");
+      const allNodes = () =>
+        Array.from(tree.querySelectorAll(".node[data-id]"));
+      const countEl = document.getElementById("count");
+      const treeLabel = document.getElementById("treeLabel");
+
+      function reset() {
+        allNodes().forEach((n) => {
+          n.classList.remove("rerender", "skip", "fine");
+          n.classList.add("connected");
+        });
+        countEl.textContent = "0";
+        treeLabel.textContent = "Component tree (idle)";
+      }
+
+      function setState(id, cls) {
+        const n = tree.querySelector(`.node[data-id="${id}"]`);
+        if (!n) return;
+        n.classList.remove("connected", "rerender", "skip", "fine");
+        n.classList.add(cls);
+      }
+
+      document.getElementById("resetTree").addEventListener("click", reset);
+
+      document.getElementById("runV5").addEventListener("click", () => {
+        reset();
+        treeLabel.textContent = "v5: dispatching tick → only LastSeen runs";
+        // skip everyone
+        allNodes().forEach((id) => setState(id.dataset.id, "skip"));
+        // Only LastSeen actually re-renders
+        setTimeout(() => {
+          setState("LastSeen", "fine");
+          countEl.textContent = "1";
+        }, 200);
+      });
+
+      document.getElementById("runV6").addEventListener("click", () => {
+        reset();
+        treeLabel.textContent =
+          "v6: dispatching tick → context cascades through every connected component";
+        const order = [
+          "App",
+          "Header",
+          "Sidebar",
+          "Main",
+          "Avatar",
+          "LastSeen",
+          "Cart",
+        ];
+        let i = 0;
+        countEl.textContent = "0";
+        const tick = () => {
+          if (i >= order.length) return;
+          const id = order[i];
+          // LastSeen is the only "needed" one; others are wasted work
+          setState(id, id === "LastSeen" ? "fine" : "rerender");
+          countEl.textContent = String(i + 1);
+          i++;
+          setTimeout(tick, 220);
+        };
+        tick();
+      });
+
+      // Theme toggle
+      document.getElementById("themeToggle").addEventListener("click", () => {
+        const cur = document.documentElement.getAttribute("data-theme");
+        document.documentElement.setAttribute(
+          "data-theme",
+          cur === "dark" ? "light" : "dark",
+        );
+      });
+    </script>
+  </body>
+</html>

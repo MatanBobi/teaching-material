@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Redux Data Flow — Interactive Demo</title>
+    <meta name="description" content="Step through the Redux data flow interactively: actions, reducers, store, and subscribers.">
+
+<script>
+  (() => {
+    const param = new URLSearchParams(window.location.search).get("clawpilotTheme");
+    const theme =
+      param || (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    document.documentElement.setAttribute("data-theme", theme);
+  })();
+</script>
+<style>
+  :root {
+    color-scheme: light;
+    --cp-bg: #f7f4ef;
+    --cp-bg-elevated: #fcfbf8;
+    --cp-surface: #ffffff;
+    --cp-surface-soft: #f5f5f5;
+    --cp-border: #dedede;
+    --cp-border-strong: #919191;
+    --cp-text: #242424;
+    --cp-text-muted: #5c5c5c;
+    --cp-text-soft: #6f6f6f;
+    --cp-accent: #b11f4b;
+    --cp-accent-hover: #9a1a41;
+    --cp-accent-soft: rgba(177, 31, 75, 0.08);
+    --cp-accent-fg: #ffffff;
+    --cp-success: #16a34a;
+    --cp-danger: #dc2626;
+    --cp-warning: #f59e0b;
+    --cp-link: #0078d4;
+    --cp-shadow: 0 18px 48px rgba(0, 0, 0, 0.12);
+    --cp-overlay: rgba(255, 255, 255, 0.8);
+    --cp-panel: rgba(255, 255, 255, 0.86);
+    --cp-panel-strong: rgba(255, 255, 255, 0.96);
+    --cp-sheen: rgba(255, 255, 255, 0.55);
+    --cp-highlight: rgba(177, 31, 75, 0.12);
+
+    /* diagram colors used for fills (still derived from cp variables) */
+    --node-ui: var(--cp-link);
+    --node-handler: var(--cp-link);
+    --node-dispatch: var(--cp-warning);
+    --node-store: var(--cp-warning);
+    --node-reducer: var(--cp-success);
+    --node-state: var(--cp-accent);
+  }
+  html[data-theme="dark"] {
+    color-scheme: dark;
+    --cp-bg: #3d3b3a;
+    --cp-bg-elevated: #343231;
+    --cp-surface: #292929;
+    --cp-surface-soft: #2e2e2e;
+    --cp-border: #474747;
+    --cp-border-strong: #5f5f5f;
+    --cp-text: #dedede;
+    --cp-text-muted: #919191;
+    --cp-text-soft: #b0b0b0;
+    --cp-accent: #fd8ea1;
+    --cp-accent-hover: #fb7b91;
+    --cp-accent-soft: rgba(253, 142, 161, 0.14);
+    --cp-accent-fg: #1a1a1a;
+    --cp-success: #4ade80;
+    --cp-danger: #f87171;
+    --cp-warning: #fbbf24;
+    --cp-link: #4da6ff;
+    --cp-shadow: 0 18px 48px rgba(0, 0, 0, 0.32);
+    --cp-overlay: rgba(41, 41, 41, 0.88);
+    --cp-panel: rgba(41, 41, 41, 0.72);
+    --cp-panel-strong: rgba(41, 41, 41, 0.96);
+    --cp-sheen: rgba(255, 255, 255, 0.04);
+    --cp-highlight: rgba(253, 142, 161, 0.12);
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--cp-bg);
+    color: var(--cp-text);
+    font-family: "Segoe UI", Aptos, Calibri, -apple-system, BlinkMacSystemFont, sans-serif;
+    line-height: 1.5;
+  }
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 32px 24px 72px;
+  }
+  header { margin-bottom: 24px; }
+  .eyebrow {
+    color: var(--cp-accent);
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  h1 {
+    font-size: 1.9rem;
+    margin: 6px 0 8px;
+  }
+  .lede { color: var(--cp-text-muted); margin: 0; }
+
+  .layout {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr;
+    gap: 24px;
+    margin-top: 24px;
+  }
+  @media (max-width: 980px) {
+    .layout { grid-template-columns: 1fr; }
+  }
+
+  .panel {
+    background: var(--cp-surface);
+    border: 1px solid var(--cp-border);
+    border-radius: 16px;
+    padding: 18px;
+    box-shadow: 0 0 2px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.14);
+  }
+  .panel h2 {
+    margin: 0 0 12px;
+    font-size: 1rem;
+    color: var(--cp-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 600;
+  }
+
+  /* SVG diagram */
+  .diagram-wrap {
+    background: var(--cp-bg-elevated);
+    border-radius: 12px;
+    padding: 12px;
+    border: 1px solid var(--cp-border);
+  }
+  svg.flow {
+    width: 100%;
+    height: auto;
+    display: block;
+    font-family: inherit;
+  }
+  .node-rect {
+    transition: filter 0.2s ease, stroke-width 0.2s ease;
+  }
+  .node-rect.active {
+    filter: drop-shadow(0 0 12px var(--cp-accent));
+    stroke: var(--cp-accent) !important;
+    stroke-width: 4 !important;
+  }
+  .arrow-path {
+    fill: none;
+    color: var(--cp-border-strong);
+    stroke: currentColor;
+    stroke-width: 2.5;
+    transition: color 0.2s ease, stroke-width 0.2s ease;
+  }
+  .arrow-path.active {
+    color: var(--cp-accent);
+    stroke-width: 4;
+  }
+  .pulse {
+    fill: var(--cp-accent);
+    opacity: 0;
+  }
+  .label-fg { fill: #1a1a1a; font-weight: 600; }
+  .label-fg-light { fill: #ffffff; font-weight: 600; }
+
+  /* UI / controls */
+  .ui-card {
+    background: var(--cp-bg-elevated);
+    border: 1px solid var(--cp-border);
+    border-radius: 12px;
+    padding: 20px;
+    text-align: center;
+    margin-bottom: 16px;
+  }
+  .balance {
+    font-size: 2.4rem;
+    font-weight: 700;
+    color: var(--cp-accent);
+    margin: 8px 0 4px;
+    font-variant-numeric: tabular-nums;
+  }
+  .balance-label {
+    font-size: 0.78rem;
+    color: var(--cp-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .btn-row {
+    display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;
+    margin-top: 14px;
+  }
+  button.cp-btn {
+    background: var(--cp-accent);
+    color: var(--cp-accent-fg);
+    border: none;
+    border-radius: 10px;
+    padding: 10px 16px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 0.9rem;
+    transition: background 0.15s ease, transform 0.1s ease;
+  }
+  button.cp-btn:hover { background: var(--cp-accent-hover); }
+  button.cp-btn:active { transform: scale(0.97); }
+  button.cp-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  button.cp-btn.ghost {
+    background: transparent;
+    color: var(--cp-text);
+    border: 1px solid var(--cp-border-strong);
+  }
+  button.cp-btn.ghost:hover { background: var(--cp-surface-soft); }
+
+  /* Log */
+  .log {
+    background: var(--cp-surface-soft);
+    border: 1px solid var(--cp-border);
+    border-radius: 10px;
+    padding: 10px;
+    height: 220px;
+    overflow-y: auto;
+    font-family: Consolas, "Courier New", Courier, monospace;
+    font-size: 0.78rem;
+  }
+  .log-entry {
+    padding: 4px 6px;
+    border-bottom: 1px dashed var(--cp-border);
+    display: flex; gap: 8px;
+    align-items: baseline;
+  }
+  .log-entry:last-child { border-bottom: none; }
+  .log-step {
+    font-weight: 700;
+    min-width: 90px;
+    color: var(--cp-accent);
+  }
+  .log-payload { color: var(--cp-text); }
+  .log-empty {
+    text-align: center;
+    color: var(--cp-text-soft);
+    padding: 20px;
+    font-style: italic;
+    font-family: inherit;
+  }
+
+  /* Code blocks */
+  details { margin-top: 16px; }
+  details summary {
+    cursor: pointer;
+    font-weight: 600;
+    color: var(--cp-text-muted);
+    padding: 8px 0;
+  }
+  pre {
+    background: var(--cp-surface-soft);
+    border: 1px solid var(--cp-border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    overflow-x: auto;
+    font-size: 0.8rem;
+    font-family: Consolas, "Courier New", Courier, monospace;
+    margin: 8px 0;
+  }
+
+  .step-label {
+    text-align: center;
+    margin-top: 6px;
+    color: var(--cp-text-muted);
+    font-size: 0.85rem;
+    min-height: 1.4em;
+    transition: color 0.2s ease;
+  }
+  .step-label.active { color: var(--cp-accent); font-weight: 600; }
+
+  .speed-row {
+    display: flex; gap: 10px; align-items: center;
+    margin-top: 12px; font-size: 0.85rem;
+    color: var(--cp-text-muted);
+  }
+  .speed-row input[type="range"] { flex: 1; accent-color: var(--cp-accent); }
+
+  .theme-toggle {
+    position: fixed; top: 16px; right: 16px;
+    background: var(--cp-surface);
+    border: 1px solid var(--cp-border);
+    border-radius: 10px;
+    padding: 6px 12px;
+    cursor: pointer;
+    font-family: inherit;
+    color: var(--cp-text);
+    font-size: 0.8rem;
+  }
+</style>
+</head>
+<body>
+
+<button class="theme-toggle" id="themeToggle">Toggle theme</button>
+
+<div class="wrap">
+
+<header>
+  <div class="eyebrow">Redux · Interactive Data Flow</div>
+  <h1>The Redux Cycle: UI → Action → Reducer → State → UI</h1>
+  <p class="lede">
+    Click <strong>Deposit $10</strong> or <strong>Withdraw $10</strong> below.
+    Watch the action travel through the exact pipeline shown in the diagram —
+    Event Handler dispatches an action, the Store routes it through the Reducers,
+    a new State is produced, and the UI re-renders with the result.
+  </p>
+</header>
+
+<div class="layout">
+
+  <div class="panel">
+    <h2>Data Flow</h2>
+    <div class="diagram-wrap">
+      <svg class="flow" viewBox="0 0 720 480" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <marker id="arrowhead" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto" markerUnits="strokeWidth">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" />
+          </marker>
+        </defs>
+
+        <!-- Store container (yellow) -->
+        <rect id="node-store" class="node-rect" x="430" y="40" width="250" height="320" rx="14"
+              fill="var(--node-store)" stroke="var(--cp-border-strong)" stroke-width="2" opacity="0.92"/>
+        <text x="615" y="68" text-anchor="middle" class="label-fg" font-size="20">Store</text>
+
+        <!-- Reducer container (green) -->
+        <rect id="node-reducer" class="node-rect" x="460" y="100" width="190" height="160" rx="14"
+              fill="var(--node-reducer)" stroke="var(--cp-border-strong)" stroke-width="2" opacity="0.95"/>
+        <text x="555" y="128" text-anchor="middle" class="label-fg" font-size="16">Reducer</text>
+
+        <!-- Three R's -->
+        <g id="reducer-r-group">
+          <rect class="node-rect r-box" x="490" y="150" width="42" height="34" rx="6"
+                fill="var(--cp-success)" stroke="#0b5d2c" stroke-width="2"/>
+          <text x="511" y="173" text-anchor="middle" class="label-fg-light" font-size="14">R</text>
+
+          <rect class="node-rect r-box" x="585" y="170" width="42" height="34" rx="6"
+                fill="var(--cp-success)" stroke="#0b5d2c" stroke-width="2"/>
+          <text x="606" y="193" text-anchor="middle" class="label-fg-light" font-size="14">R</text>
+
+          <rect class="node-rect r-box" x="510" y="210" width="42" height="34" rx="6"
+                fill="var(--cp-success)" stroke="#0b5d2c" stroke-width="2"/>
+          <text x="531" y="233" text-anchor="middle" class="label-fg-light" font-size="14">R</text>
+        </g>
+
+        <!-- State (orange) -->
+        <rect id="node-state" class="node-rect" x="500" y="295" width="120" height="44" rx="8"
+              fill="var(--node-state)" stroke="var(--cp-border-strong)" stroke-width="2"/>
+        <text x="560" y="322" text-anchor="middle" class="label-fg-light" font-size="16">State</text>
+
+        <!-- Event Handler (blue, left top) -->
+        <rect id="node-handler" class="node-rect" x="60" y="120" width="220" height="120" rx="12"
+              fill="var(--node-handler)" stroke="var(--cp-border-strong)" stroke-width="2" opacity="0.92"/>
+        <text x="170" y="200" text-anchor="middle" class="label-fg-light" font-size="20">Event Handler</text>
+
+        <!-- Dispatch tab on top of Event Handler -->
+        <rect id="node-dispatch" class="node-rect" x="100" y="100" width="140" height="40" rx="8"
+              fill="var(--node-dispatch)" stroke="var(--cp-border-strong)" stroke-width="2"/>
+        <text x="170" y="127" text-anchor="middle" class="label-fg" font-size="16">Dispatch</text>
+
+        <!-- UI (blue, bottom) -->
+        <rect id="node-ui" class="node-rect" x="120" y="340" width="240" height="110" rx="12"
+              fill="var(--node-ui)" stroke="var(--cp-border-strong)" stroke-width="2" opacity="0.92"/>
+        <text x="160" y="362" class="label-fg-light" font-size="14">UI</text>
+        <!-- Buttons inside UI -->
+        <rect x="140" y="370" width="120" height="26" rx="6" fill="var(--cp-surface-soft)" stroke="var(--cp-border-strong)"/>
+        <text x="200" y="388" text-anchor="middle" fill="var(--cp-text)" font-size="12">Deposit $10</text>
+        <rect x="140" y="402" width="120" height="26" rx="6" fill="var(--cp-surface-soft)" stroke="var(--cp-border-strong)"/>
+        <text x="200" y="420" text-anchor="middle" fill="var(--cp-text)" font-size="12">Withdraw $10</text>
+        <!-- Balance display in UI -->
+        <text id="ui-balance-svg" x="320" y="405" text-anchor="middle" class="label-fg-light" font-size="22" font-weight="700">$0</text>
+
+        <!-- Arrows -->
+        <!-- 1. Dispatch -> Store (top curve, ending at Store top edge) -->
+        <path id="arrow-dispatch-store" class="arrow-path"
+              d="M 170 100 C 170 20, 555 10, 555 38"
+              marker-end="url(#arrowhead)"/>
+        <!-- 2. Reducer -> State (straight down inside store) -->
+        <path id="arrow-reducer-state" class="arrow-path"
+              d="M 555 262 L 555 293"
+              marker-end="url(#arrowhead)"/>
+        <!-- 3. State -> Reducer (loop back: from State left edge, around to Reducer bottom-left) -->
+        <path id="arrow-state-reducer" class="arrow-path"
+              d="M 500 317 C 460 317, 470 268, 490 263"
+              marker-end="url(#arrowhead)"/>
+        <!-- 4. State -> UI (exit store on bottom-left, curve to right edge of UI) -->
+        <path id="arrow-state-ui" class="arrow-path"
+              d="M 500 330 C 440 380, 410 395, 362 395"
+              marker-end="url(#arrowhead)"/>
+        <!-- 5. UI -> Event Handler (left side, upward) -->
+        <path id="arrow-ui-handler" class="arrow-path"
+              d="M 170 340 C 80 320, 80 260, 110 242"
+              marker-end="url(#arrowhead)"/>
+
+        <!-- Pulse traveling dot -->
+        <circle id="pulse" class="pulse" r="9" cx="170" cy="120"/>
+      </svg>
+    </div>
+    <div id="step-label" class="step-label">Idle — click a button below to start the cycle</div>
+
+    <div class="speed-row">
+      <label for="speed">Step duration</label>
+      <input id="speed" type="range" min="200" max="4000" step="100" value="800"/>
+      <span id="speed-val" style="min-width: 64px; text-align: right;">800ms</span>
+    </div>
+    <div class="speed-row" style="margin-top: 6px; justify-content: space-between;">
+      <span style="font-size: 0.75rem;">Faster</span>
+      <button class="cp-btn ghost" id="presetSlow" style="padding: 4px 10px; font-size: 0.75rem;">Slow (2s)</button>
+      <button class="cp-btn ghost" id="presetVerySlow" style="padding: 4px 10px; font-size: 0.75rem;">Very slow (4s)</button>
+      <span style="font-size: 0.75rem;">Slower</span>
+    </div>
+  </div>
+
+  <div>
+    <div class="panel">
+      <h2>UI Component</h2>
+      <div class="ui-card">
+        <div class="balance-label">Account Balance</div>
+        <div class="balance" id="balanceDisplay">$0</div>
+        <div class="btn-row">
+          <button class="cp-btn" id="depositBtn">Deposit $10</button>
+          <button class="cp-btn ghost" id="withdrawBtn">Withdraw $10</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-top: 16px;">
+      <h2>Action Log</h2>
+      <div class="log" id="log">
+        <div class="log-empty">No actions dispatched yet.</div>
+      </div>
+      <div style="margin-top: 10px; text-align: right;">
+        <button class="cp-btn ghost" id="clearLog">Clear log</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<details open>
+  <summary>Show the Redux code that powers this demo</summary>
+  <pre><code>// 1. Action Types
+const DEPOSIT  = 'account/deposit';
+const WITHDRAW = 'account/withdraw';
+
+// 2. Action Creators
+const deposit  = (amount) => ({ type: DEPOSIT,  payload: amount });
+const withdraw = (amount) => ({ type: WITHDRAW, payload: amount });
+
+// 3. Reducer (pure function: (state, action) => newState)
+function accountReducer(state = { balance: 0 }, action) {
+  switch (action.type) {
+    case DEPOSIT:  return { ...state, balance: state.balance + action.payload };
+    case WITHDRAW: return { ...state, balance: state.balance - action.payload };
+    default:       return state;
+  }
+}
+
+// 4. Store (holds state, accepts dispatches, notifies subscribers)
+function createStore(reducer) {
+  let state = reducer(undefined, { type: '@@INIT' });
+  const listeners = [];
+  return {
+    getState:   () => state,
+    dispatch:   (action) => { state = reducer(state, action); listeners.forEach(fn => fn()); },
+    subscribe:  (fn) => { listeners.push(fn); return () => listeners.splice(listeners.indexOf(fn), 1); },
+  };
+}
+
+// 5. Wire it up
+const store = createStore(accountReducer);
+store.subscribe(() => render(store.getState()));   // UI re-renders on state change
+depositBtn.onclick  = () => store.dispatch(deposit(10));
+withdrawBtn.onclick = () => store.dispatch(withdraw(10));</code></pre>
+</details>
+
+</div>
+
+<script>
+  // ---------------- Mini Redux ----------------
+  const DEPOSIT = 'account/deposit';
+  const WITHDRAW = 'account/withdraw';
+
+  function accountReducer(state = { balance: 0 }, action) {
+    switch (action.type) {
+      case DEPOSIT:  return { ...state, balance: state.balance + action.payload };
+      case WITHDRAW: return { ...state, balance: state.balance - action.payload };
+      default:       return state;
+    }
+  }
+
+  function createStore(reducer) {
+    let state = reducer(undefined, { type: '@@INIT' });
+    const listeners = [];
+    return {
+      getState: () => state,
+      dispatch: (action) => {
+        state = reducer(state, action);
+        listeners.forEach(fn => fn(action, state));
+      },
+      subscribe: (fn) => { listeners.push(fn); return () => listeners.splice(listeners.indexOf(fn), 1); },
+    };
+  }
+
+  const store = createStore(accountReducer);
+
+  // ---------------- DOM refs ----------------
+  const balanceDisplay = document.getElementById('balanceDisplay');
+  const uiBalanceSvg   = document.getElementById('ui-balance-svg');
+  const depositBtn     = document.getElementById('depositBtn');
+  const withdrawBtn    = document.getElementById('withdrawBtn');
+  const logEl          = document.getElementById('log');
+  const clearLogBtn    = document.getElementById('clearLog');
+  const stepLabel      = document.getElementById('step-label');
+  const pulse          = document.getElementById('pulse');
+  const speedSlider    = document.getElementById('speed');
+  const speedVal       = document.getElementById('speed-val');
+
+  const nodes = {
+    ui:       document.getElementById('node-ui'),
+    handler:  document.getElementById('node-handler'),
+    dispatch: document.getElementById('node-dispatch'),
+    store:    document.getElementById('node-store'),
+    reducer:  document.getElementById('node-reducer'),
+    state:    document.getElementById('node-state'),
+  };
+  const arrows = {
+    uiHandler:      document.getElementById('arrow-ui-handler'),
+    dispatchStore:  document.getElementById('arrow-dispatch-store'),
+    stateReducer:   document.getElementById('arrow-state-reducer'),
+    reducerState:   document.getElementById('arrow-reducer-state'),
+    stateUi:        document.getElementById('arrow-state-ui'),
+  };
+
+  // ---------------- Rendering ----------------
+  function render(state) {
+    balanceDisplay.textContent = '$' + state.balance;
+    uiBalanceSvg.textContent   = '$' + state.balance;
+    balanceDisplay.style.color =
+      state.balance < 0 ? 'var(--cp-danger)' :
+      state.balance > 0 ? 'var(--cp-success)' : 'var(--cp-accent)';
+  }
+
+  function logEntry(step, payload) {
+    if (logEl.querySelector('.log-empty')) logEl.innerHTML = '';
+    const div = document.createElement('div');
+    div.className = 'log-entry';
+    div.innerHTML = `<span class="log-step">${step}</span><span class="log-payload">${payload}</span>`;
+    logEl.prepend(div);
+  }
+
+  // ---------------- Animation ----------------
+  let speed = parseInt(speedSlider.value, 10);
+  function setSpeed(ms) {
+    speed = ms;
+    speedSlider.value = String(ms);
+    speedVal.textContent = ms + 'ms';
+  }
+  speedSlider.addEventListener('input', () => setSpeed(parseInt(speedSlider.value, 10)));
+  document.getElementById('presetSlow').addEventListener('click', () => setSpeed(2000));
+  document.getElementById('presetVerySlow').addEventListener('click', () => setSpeed(4000));
+
+  function highlight(node, on = true) {
+    if (!node) return;
+    node.classList.toggle('active', on);
+  }
+  function highlightArrow(arrow, on = true) {
+    if (!arrow) return;
+    arrow.classList.toggle('active', on);
+  }
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+  // Animate pulse dot along an SVG path
+  function animatePulse(pathEl) {
+    return new Promise(resolve => {
+      const length = pathEl.getTotalLength();
+      const start = performance.now();
+      pulse.style.opacity = '1';
+      function frame(now) {
+        const t = Math.min(1, (now - start) / speed);
+        const pt = pathEl.getPointAtLength(t * length);
+        pulse.setAttribute('cx', pt.x);
+        pulse.setAttribute('cy', pt.y);
+        if (t < 1) requestAnimationFrame(frame);
+        else { pulse.style.opacity = '0'; resolve(); }
+      }
+      requestAnimationFrame(frame);
+    });
+  }
+
+  let busy = false;
+  async function runCycle(action) {
+    if (busy) return;
+    busy = true;
+    depositBtn.disabled = true;
+    withdrawBtn.disabled = true;
+
+    const label = action.type === DEPOSIT ? 'Deposit' : 'Withdraw';
+
+    // STEP 1: UI button click → Event Handler
+    stepLabel.textContent = '1. UI button click → Event Handler';
+    stepLabel.classList.add('active');
+    highlight(nodes.ui);
+    highlightArrow(arrows.uiHandler);
+    await animatePulse(arrows.uiHandler);
+    highlight(nodes.ui, false);
+    highlight(nodes.handler);
+    logEntry('CLICK', `User clicked "${label} $10"`);
+    await sleep(speed * 0.3);
+    highlightArrow(arrows.uiHandler, false);
+
+    // STEP 2: Event Handler → dispatch(action)
+    stepLabel.textContent = '2. Event Handler calls dispatch(action)';
+    highlight(nodes.dispatch);
+    logEntry('DISPATCH', `{ type: "${action.type}", payload: ${action.payload} }`);
+    await sleep(speed * 0.5);
+    highlight(nodes.handler, false);
+
+    // STEP 3: Dispatch → Store (top arrow)
+    stepLabel.textContent = '3. Action travels to the Store';
+    highlightArrow(arrows.dispatchStore);
+    await animatePulse(arrows.dispatchStore);
+    highlight(nodes.dispatch, false);
+    highlightArrow(arrows.dispatchStore, false);
+    highlight(nodes.store);
+    await sleep(speed * 0.2);
+
+    // STEP 4: Store reads CURRENT state and sends it to the Reducer
+    const prevState = store.getState();
+    stepLabel.textContent = `4. Store reads current state {balance: ${prevState.balance}} and sends it to the Reducer`;
+    highlight(nodes.state);
+    logEntry('READ STATE', `Store grabs current state: {balance: ${prevState.balance}}`);
+    await sleep(speed * 0.3);
+    highlightArrow(arrows.stateReducer);
+    await animatePulse(arrows.stateReducer);
+    highlightArrow(arrows.stateReducer, false);
+    highlight(nodes.state, false);
+
+    // STEP 5: Reducer receives (currentState, action) and computes new state
+    stepLabel.textContent = `5. Reducer runs: (state, action) → newState`;
+    highlight(nodes.reducer);
+    logEntry('REDUCER IN', `reducer({balance: ${prevState.balance}}, {type: "${action.type}", payload: ${action.payload}})`);
+    // flash the R boxes
+    const rs = document.querySelectorAll('#reducer-r-group .r-box');
+    for (const r of rs) {
+      r.classList.add('active');
+      await sleep(speed * 0.18);
+      r.classList.remove('active');
+    }
+
+    // STEP 6: Reducer returns new State
+    store.dispatch(action); // actually mutates redux store
+    const newState = store.getState();
+    stepLabel.textContent = '6. Reducer returns a NEW state object';
+    logEntry('REDUCER OUT', `→ {balance: ${newState.balance}}`);
+    highlightArrow(arrows.reducerState);
+    await animatePulse(arrows.reducerState);
+    highlightArrow(arrows.reducerState, false);
+    highlight(nodes.reducer, false);
+    highlight(nodes.state);
+    await sleep(speed * 0.3);
+
+    // STEP 7: State → UI (re-render)
+    stepLabel.textContent = '7. New state flows back to the UI';
+    highlight(nodes.store, false);
+    highlightArrow(arrows.stateUi);
+    await animatePulse(arrows.stateUi);
+    highlight(nodes.state, false);
+    highlightArrow(arrows.stateUi, false);
+    highlight(nodes.ui);
+    logEntry('RENDER', `UI re-rendered with balance = $${newState.balance}`);
+    await sleep(speed * 0.5);
+    highlight(nodes.ui, false);
+
+    stepLabel.textContent = 'Cycle complete — dispatch another action!';
+    stepLabel.classList.remove('active');
+
+    depositBtn.disabled = false;
+    withdrawBtn.disabled = false;
+    busy = false;
+  }
+
+  // Subscribe UI render to store (covers initial render + any external dispatches)
+  store.subscribe(() => render(store.getState()));
+  render(store.getState());
+
+  depositBtn.addEventListener('click',  () => runCycle({ type: DEPOSIT,  payload: 10 }));
+  withdrawBtn.addEventListener('click', () => runCycle({ type: WITHDRAW, payload: 10 }));
+
+  clearLogBtn.addEventListener('click', () => {
+    logEl.innerHTML = '<div class="log-empty">No actions dispatched yet.</div>';
+  });
+
+  document.getElementById('themeToggle').addEventListener('click', () => {
+    const cur = document.documentElement.getAttribute('data-theme');
+    document.documentElement.setAttribute('data-theme', cur === 'dark' ? 'light' : 'dark');
+  });
+</script>
+
+</body>
+</html>

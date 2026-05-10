@@ -1,0 +1,12 @@
+#!/usr/bin/env sh
+# Regenerate index.html if any staged change affects content the index depends on.
+
+# Look at staged files
+staged=$(git diff --cached --name-only --diff-filter=ACMR)
+
+# Only run when relevant files are staged
+if echo "$staged" | grep -Eq '(^|/).+\.html$|^generate-index\.js$'; then
+    echo "[pre-commit] Regenerating index.html..."
+    node generate-index.js || exit 1
+    git add index.html
+fi
