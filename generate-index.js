@@ -116,26 +116,29 @@ function listSections(root) {
 
 function renderLesson(lesson) {
   const desc = lesson.description
-    ? `\n                <div class="lesson-desc">${escapeHtml(
+    ? `\n                <p class="lesson-desc">${escapeHtml(
         lesson.description
-      )}</div>`
+      )}</p>`
     : "";
   return `            <a class="lesson" href="${escapeHtml(lesson.href)}">
-                <div class="lesson-title">${escapeHtml(lesson.title)}</div>${desc}
+                <h3 class="lesson-title">${escapeHtml(lesson.title)}</h3>${desc}
+                <span class="lesson-cta">Open lesson <span aria-hidden="true">&rarr;</span></span>
             </a>`;
 }
 
 function renderSection(section) {
-  return `        <h2>${escapeHtml(section.title)}</h2>
-        <div class="lessons">
+  return `        <section class="section">
+            <h2 class="section-title">${escapeHtml(section.title)}</h2>
+            <div class="lessons">
 ${section.lessons.map(renderLesson).join("\n")}
-        </div>`;
+            </div>
+        </section>`;
 }
 
 function renderIndex(sections) {
   const body = sections.length
     ? sections.map(renderSection).join("\n\n")
-    : `        <p class="subtitle">No lessons found yet. Drop an .html file into a subfolder and rerun the generator.</p>`;
+    : `        <p class="empty">No lessons found yet. Drop an .html file into a subfolder and rerun the generator.</p>`;
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -146,96 +149,162 @@ function renderIndex(sections) {
     <meta name="description" content="A wiki of interactive teaching materials and explanations.">
     <style>
         :root {
-            color-scheme: light dark;
-            --bg: #f7f7f8;
-            --fg: #1a1a1a;
-            --muted: #666;
-            --card: #fff;
-            --border: #e5e5e7;
-            --accent: #5b3fd9;
+            color-scheme: light;
+            --cp-bg: #f7f4ef;
+            --cp-bg-elevated: #fcfbf8;
+            --cp-surface: #ffffff;
+            --cp-surface-soft: #f5f5f5;
+            --cp-border: #dedede;
+            --cp-border-strong: #919191;
+            --cp-text: #242424;
+            --cp-text-muted: #5c5c5c;
+            --cp-text-soft: #6f6f6f;
+            --cp-accent: #b11f4b;
+            --cp-accent-hover: #9a1a41;
+            --cp-accent-soft: rgba(177, 31, 75, 0.08);
+            --cp-accent-fg: #ffffff;
+            --cp-shadow: 0 18px 48px rgba(0, 0, 0, 0.12);
         }
         @media (prefers-color-scheme: dark) {
             :root {
-                --bg: #131316;
-                --fg: #f0f0f2;
-                --muted: #9a9aa3;
-                --card: #1c1c20;
-                --border: #2a2a30;
-                --accent: #9d86ff;
+                color-scheme: dark;
+                --cp-bg: #3d3b3a;
+                --cp-bg-elevated: #343231;
+                --cp-surface: #292929;
+                --cp-surface-soft: #2e2e2e;
+                --cp-border: #474747;
+                --cp-border-strong: #5f5f5f;
+                --cp-text: #dedede;
+                --cp-text-muted: #919191;
+                --cp-text-soft: #b0b0b0;
+                --cp-accent: #fd8ea1;
+                --cp-accent-hover: #fb7b91;
+                --cp-accent-soft: rgba(253, 142, 161, 0.14);
+                --cp-accent-fg: #1a1a1a;
+                --cp-shadow: 0 18px 48px rgba(0, 0, 0, 0.32);
             }
         }
+
         * { box-sizing: border-box; }
-        body {
+        html, body {
             margin: 0;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-            background: var(--bg);
-            color: var(--fg);
+            padding: 0;
+            background: var(--cp-bg);
+            color: var(--cp-text);
+            font-family: "Segoe UI", Aptos, Calibri, -apple-system, BlinkMacSystemFont, sans-serif;
             line-height: 1.5;
             min-height: 100vh;
         }
-        main {
-            max-width: 720px;
+        .wrap {
+            max-width: 880px;
             margin: 0 auto;
-            padding: 4rem 1.5rem;
+            padding: 64px 24px 96px;
         }
-        h1 {
-            font-size: 2rem;
-            margin: 0 0 0.5rem;
-            letter-spacing: -0.02em;
+        header {
+            margin-bottom: 48px;
         }
-        .subtitle {
-            color: var(--muted);
-            margin: 0 0 3rem;
-        }
-        h2 {
-            font-size: 0.85rem;
+        .eyebrow {
+            color: var(--cp-accent);
+            font-size: 0.8rem;
+            font-weight: 600;
             text-transform: uppercase;
             letter-spacing: 0.08em;
-            color: var(--muted);
-            margin: 2.5rem 0 1rem;
+            margin: 0 0 8px;
+        }
+        h1 {
+            font-size: 2.2rem;
+            margin: 0 0 12px;
+            letter-spacing: -0.01em;
+        }
+        .lede {
+            color: var(--cp-text-muted);
+            margin: 0;
+            font-size: 1.05rem;
+            max-width: 60ch;
+        }
+
+        .section + .section {
+            margin-top: 48px;
+        }
+        .section-title {
+            margin: 0 0 16px;
+            font-size: 0.85rem;
+            color: var(--cp-text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
             font-weight: 600;
         }
         .lessons {
             display: grid;
-            gap: 0.75rem;
+            gap: 12px;
         }
         a.lesson {
             display: block;
-            padding: 1.25rem 1.5rem;
-            background: var(--card);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            color: var(--fg);
+            position: relative;
+            padding: 20px 22px;
+            background: var(--cp-surface);
+            border: 1px solid var(--cp-border);
+            border-radius: 16px;
+            color: var(--cp-text);
             text-decoration: none;
-            transition: transform 0.15s ease, border-color 0.15s ease;
+            box-shadow: 0 0 2px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.08);
+            transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
         }
-        a.lesson:hover {
-            border-color: var(--accent);
+        a.lesson:hover,
+        a.lesson:focus-visible {
+            border-color: var(--cp-accent);
+            background: var(--cp-accent-soft);
             transform: translateY(-1px);
+            box-shadow: var(--cp-shadow);
+            outline: none;
         }
         .lesson-title {
+            margin: 0 0 6px;
+            font-size: 1.1rem;
             font-weight: 600;
-            font-size: 1.05rem;
-            margin-bottom: 0.25rem;
+            color: var(--cp-text);
         }
         .lesson-desc {
-            color: var(--muted);
-            font-size: 0.9rem;
+            margin: 0 0 10px;
+            color: var(--cp-text-muted);
+            font-size: 0.95rem;
         }
-        footer {
-            margin-top: 4rem;
-            color: var(--muted);
-            font-size: 0.8rem;
+        .lesson-cta {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            color: var(--cp-accent);
+            font-size: 0.85rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        a.lesson:hover .lesson-cta span[aria-hidden="true"] {
+            transform: translateX(2px);
+        }
+        .lesson-cta span[aria-hidden="true"] {
+            transition: transform 0.15s ease;
+        }
+
+        .empty {
+            color: var(--cp-text-muted);
+            background: var(--cp-surface-soft);
+            border: 1px dashed var(--cp-border);
+            border-radius: 12px;
+            padding: 24px;
         }
     </style>
 </head>
 <body>
-    <main>
-        <h1>Teaching Materials</h1>
-        <p class="subtitle">Interactive demos and explanations.</p>
+    <div class="wrap">
+        <header>
+            <p class="eyebrow">Teaching Materials</p>
+            <h1>Interactive explanations &amp; demos</h1>
+            <p class="lede">A small wiki of hands-on lessons. Pick a topic to dive in.</p>
+        </header>
 
 ${body}
-    </main>
+    </div>
 </body>
 </html>
 `;
