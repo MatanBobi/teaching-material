@@ -1,0 +1,845 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>How React's use() hook throws a promise</title>
+<meta name="description" content="An interactive walkthrough of React's use(promise) hook: how it throws the pending promise, how Suspense catches it, and how the component is re-rendered when the promise resolves." />
+
+<script>
+  (() => {
+    const theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    document.documentElement.setAttribute("data-theme", theme);
+  })();
+</script>
+
+<style>
+  :root {
+    color-scheme: light;
+    --cp-bg: #f7f4ef;
+    --cp-bg-elevated: #fcfbf8;
+    --cp-surface: #ffffff;
+    --cp-surface-soft: #f5f5f5;
+    --cp-border: #dedede;
+    --cp-border-strong: #919191;
+    --cp-text: #242424;
+    --cp-text-muted: #5c5c5c;
+    --cp-text-soft: #6f6f6f;
+    --cp-accent: #b11f4b;
+    --cp-accent-hover: #9a1a41;
+    --cp-accent-soft: rgba(177, 31, 75, 0.08);
+    --cp-accent-fg: #ffffff;
+    --cp-success: #16a34a;
+    --cp-success-soft: rgba(22, 163, 74, 0.12);
+    --cp-danger: #dc2626;
+    --cp-danger-soft: rgba(220, 38, 38, 0.12);
+    --cp-warning: #f59e0b;
+    --cp-warning-soft: rgba(245, 158, 11, 0.14);
+    --cp-link: #0078d4;
+    --cp-shadow: 0 18px 48px rgba(0, 0, 0, 0.12);
+
+    --component: #2563eb;
+    --component-soft: rgba(37, 99, 235, 0.12);
+    --suspense: #7c3aed;
+    --suspense-soft: rgba(124, 58, 237, 0.12);
+    --promise: #f59e0b;
+    --react: var(--cp-accent);
+  }
+  html[data-theme="dark"] {
+    color-scheme: dark;
+    --cp-bg: #1b1d2a;
+    --cp-bg-elevated: #232536;
+    --cp-surface: #292c40;
+    --cp-surface-soft: #2e3146;
+    --cp-border: #3a3d54;
+    --cp-border-strong: #5f6380;
+    --cp-text: #f1f3ff;
+    --cp-text-muted: #b8bbd4;
+    --cp-text-soft: #9da0bb;
+    --cp-accent: #fd8ea1;
+    --cp-accent-hover: #fb7b91;
+    --cp-accent-soft: rgba(253, 142, 161, 0.18);
+    --cp-accent-fg: #1a1a1a;
+    --cp-success: #4ade80;
+    --cp-success-soft: rgba(74, 222, 128, 0.18);
+    --cp-danger: #f87171;
+    --cp-danger-soft: rgba(248, 113, 113, 0.18);
+    --cp-warning: #fbbf24;
+    --cp-warning-soft: rgba(251, 191, 36, 0.18);
+    --cp-link: #4da6ff;
+    --cp-shadow: 0 18px 48px rgba(0, 0, 0, 0.42);
+
+    --component: #60a5fa;
+    --component-soft: rgba(96, 165, 250, 0.18);
+    --suspense: #a78bfa;
+    --suspense-soft: rgba(167, 139, 250, 0.18);
+    --promise: #fbbf24;
+    --react: var(--cp-accent);
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--cp-bg);
+    color: var(--cp-text);
+    font-family: "Segoe UI", Aptos, Calibri, -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+
+  body {
+    min-height: 100vh;
+    padding: 32px 20px 48px;
+  }
+
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+  }
+
+  header.hero {
+    margin-bottom: 24px;
+  }
+  .eyebrow {
+    font-size: 12px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--cp-text-muted);
+    margin-bottom: 6px;
+  }
+  h1 {
+    font-size: clamp(28px, 4vw, 44px);
+    line-height: 1.1;
+    margin: 0 0 10px;
+    letter-spacing: -0.01em;
+  }
+  .lede {
+    color: var(--cp-text-muted);
+    font-size: 16px;
+    max-width: 75ch;
+    margin: 0;
+  }
+
+  .card {
+    background: var(--cp-surface);
+    border: 1px solid var(--cp-border);
+    border-radius: 16px;
+    box-shadow: 0 0 2px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.14);
+    padding: 20px;
+  }
+
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    margin: 18px 0;
+  }
+  button {
+    font-family: inherit;
+    font-size: 14px;
+    padding: 9px 14px;
+    border-radius: 0.625rem;
+    border: 1px solid var(--cp-border-strong);
+    background: var(--cp-surface);
+    color: var(--cp-text);
+    cursor: pointer;
+    transition: background 0.15s ease, transform 0.05s ease, border-color 0.15s ease;
+  }
+  button:hover { background: var(--cp-surface-soft); }
+  button:active { transform: translateY(1px); }
+  button.primary {
+    background: var(--cp-accent);
+    color: var(--cp-accent-fg);
+    border-color: var(--cp-accent);
+  }
+  button.primary:hover { background: var(--cp-accent-hover); border-color: var(--cp-accent-hover); }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .speed {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--cp-text-muted);
+    font-size: 13px;
+  }
+  .speed input { accent-color: var(--cp-accent); }
+
+  .stage {
+    position: relative;
+    border-radius: 16px;
+    background: var(--cp-bg-elevated);
+    border: 1px solid var(--cp-border);
+    padding: 20px;
+  }
+
+  .scene {
+    display: grid;
+    grid-template-columns: 1.1fr 1fr;
+    gap: 20px;
+  }
+  @media (max-width: 880px) {
+    .scene { grid-template-columns: 1fr; }
+  }
+
+  /* ----- Boxes representing React internals ----- */
+  .pane {
+    border: 1px solid var(--cp-border);
+    border-radius: 14px;
+    background: var(--cp-surface);
+    padding: 14px;
+    position: relative;
+    min-height: 380px;
+  }
+  .pane h3 {
+    margin: 0 0 12px;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--cp-text-muted);
+  }
+
+  .box {
+    border: 1.5px solid var(--cp-border-strong);
+    border-radius: 12px;
+    padding: 12px 14px;
+    margin-bottom: 12px;
+    background: var(--cp-bg-elevated);
+    transition: border-color 0.25s ease, background 0.25s ease, box-shadow 0.25s ease, opacity 0.25s ease;
+    position: relative;
+  }
+  .box .box-title {
+    font-weight: 600;
+    font-size: 14px;
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .box .box-sub {
+    font-size: 12px;
+    color: var(--cp-text-muted);
+    line-height: 1.4;
+  }
+  .box .tag {
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--cp-border);
+    background: var(--cp-surface-soft);
+    color: var(--cp-text-muted);
+  }
+
+  .box.suspense { border-color: var(--suspense); background: var(--suspense-soft); }
+  .box.suspense .tag { background: var(--suspense); color: white; border-color: var(--suspense); }
+  .box.component { border-color: var(--component); background: var(--component-soft); }
+  .box.component .tag { background: var(--component); color: white; border-color: var(--component); }
+
+  .box.active {
+    box-shadow: 0 0 0 3px var(--cp-accent-soft), 0 8px 24px rgba(0,0,0,0.15);
+    transform: scale(1.01);
+  }
+  .box.dim { opacity: 0.45; }
+  .box.unwound { opacity: 0.35; border-style: dashed; }
+
+  .nested {
+    margin-left: 18px;
+  }
+
+  .render-output {
+    margin-top: 8px;
+    padding: 10px 12px;
+    border: 1px dashed var(--cp-border-strong);
+    border-radius: 8px;
+    background: var(--cp-surface);
+    font-size: 13px;
+    color: var(--cp-text);
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: background 0.25s ease, color 0.25s ease;
+  }
+  .render-output.fallback {
+    background: var(--suspense-soft);
+    color: var(--suspense);
+    font-weight: 600;
+  }
+  .render-output.success {
+    background: var(--cp-success-soft);
+    color: var(--cp-success);
+    font-weight: 600;
+  }
+  .render-output .spinner {
+    width: 14px; height: 14px;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ----- Code panel ----- */
+  .code {
+    font-family: Consolas, "Courier New", Courier, monospace;
+    font-size: 13px;
+    line-height: 1.55;
+    background: var(--cp-bg-elevated);
+    border: 1px solid var(--cp-border);
+    border-radius: 12px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    white-space: pre;
+  }
+  .code .ln {
+    display: block;
+    padding: 1px 8px;
+    border-radius: 6px;
+    transition: background 0.2s ease, color 0.2s ease;
+  }
+  .code .ln.hl {
+    background: var(--cp-accent-soft);
+    color: var(--cp-text);
+  }
+  .code .ln.thrown {
+    background: var(--cp-warning-soft);
+    color: var(--cp-text);
+  }
+  .code .kw  { color: #c026d3; }
+  .code .fn  { color: #0891b2; }
+  .code .str { color: #16a34a; }
+  .code .com { color: var(--cp-text-soft); font-style: italic; }
+  html[data-theme="dark"] .code .kw  { color: #f0abfc; }
+  html[data-theme="dark"] .code .fn  { color: #67e8f9; }
+  html[data-theme="dark"] .code .str { color: #86efac; }
+
+  /* ----- Promise visualizer ----- */
+  .promise-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    border: 1px solid var(--cp-border);
+    border-radius: 10px;
+    background: var(--cp-surface);
+    margin-bottom: 10px;
+  }
+  .promise-icon {
+    width: 34px; height: 34px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    font-weight: 700;
+    color: white;
+    background: var(--cp-text-soft);
+    flex-shrink: 0;
+    transition: background 0.3s ease, transform 0.3s ease;
+  }
+  .promise-icon.pending { background: var(--promise); animation: pulse 1.4s ease-in-out infinite; }
+  .promise-icon.fulfilled { background: var(--cp-success); }
+  .promise-icon.rejected { background: var(--cp-danger); }
+  @keyframes pulse {
+    0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(245,158,11,0.5); }
+    50%      { transform: scale(1.08); box-shadow: 0 0 0 8px rgba(245,158,11,0); }
+  }
+  .promise-meta {
+    flex: 1;
+    min-width: 0;
+  }
+  .promise-meta .label { font-size: 13px; font-weight: 600; }
+  .promise-meta .state { font-size: 12px; color: var(--cp-text-muted); }
+
+  /* ----- Step narration ----- */
+  .narration {
+    margin-top: 16px;
+    padding: 14px 16px;
+    border: 1px solid var(--cp-border);
+    border-radius: 12px;
+    background: var(--cp-surface);
+    min-height: 72px;
+  }
+  .narration .step-num {
+    display: inline-block;
+    background: var(--cp-accent);
+    color: var(--cp-accent-fg);
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 999px;
+    letter-spacing: 0.06em;
+    margin-bottom: 8px;
+  }
+  .narration .step-text {
+    font-size: 14.5px;
+    line-height: 1.55;
+    color: var(--cp-text);
+  }
+  .narration .step-text code {
+    font-family: Consolas, "Courier New", Courier, monospace;
+    background: var(--cp-surface-soft);
+    border: 1px solid var(--cp-border);
+    padding: 1px 6px;
+    border-radius: 6px;
+    font-size: 0.9em;
+  }
+
+  /* ----- Action arrows ----- */
+  .arrow {
+    position: absolute;
+    pointer-events: none;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: var(--cp-warning);
+    color: #1a1a1a;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.18);
+    opacity: 0;
+    transform: translateY(-4px);
+    transition: opacity 0.25s ease, transform 0.25s ease;
+    z-index: 5;
+  }
+  .arrow.visible { opacity: 1; transform: translateY(0); }
+  .arrow.success { background: var(--cp-success); color: white; }
+  .arrow.react { background: var(--cp-accent); color: var(--cp-accent-fg); }
+
+  .progress {
+    display: flex;
+    gap: 6px;
+    margin: 14px 0 4px;
+  }
+  .progress .dot {
+    flex: 1;
+    height: 6px;
+    border-radius: 999px;
+    background: var(--cp-border);
+    transition: background 0.25s ease;
+  }
+  .progress .dot.done { background: var(--cp-accent); }
+  .progress .dot.current { background: var(--cp-accent); box-shadow: 0 0 0 3px var(--cp-accent-soft); }
+
+  .explainer {
+    margin-top: 24px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 14px;
+  }
+  .explainer .card h3 {
+    margin: 0 0 6px;
+    font-size: 15px;
+  }
+  .explainer .card p {
+    margin: 0;
+    font-size: 14px;
+    color: var(--cp-text-muted);
+    line-height: 1.5;
+  }
+  code.inline {
+    font-family: Consolas, "Courier New", Courier, monospace;
+    background: var(--cp-surface-soft);
+    border: 1px solid var(--cp-border);
+    padding: 1px 6px;
+    border-radius: 6px;
+    font-size: 0.9em;
+  }
+
+  footer.foot {
+    margin-top: 28px;
+    text-align: center;
+    color: var(--cp-text-soft);
+    font-size: 12px;
+  }
+  footer a { color: var(--cp-link); text-decoration: none; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="hero">
+      <div class="eyebrow">React 19 · use()</div>
+      <h1>How <code class="inline">use(promise)</code> throws to suspend</h1>
+      <p class="lede">
+        React's <code class="inline">use</code> hook reads a value from a promise. But if the promise hasn't resolved yet, it does something surprising: it <strong>throws the promise itself</strong>. The nearest <code class="inline">&lt;Suspense&gt;</code> catches it, shows a fallback, and re-renders the component once the promise resolves. Press <strong>Play</strong> to watch the full lifecycle.
+      </p>
+    </header>
+
+    <div class="stage">
+      <div class="scene">
+        <!-- LEFT: React tree -->
+        <div class="pane" id="treePane">
+          <h3>React tree</h3>
+
+          <div class="box suspense" id="boxSuspense">
+            <div class="box-title">
+              <span class="tag">Suspense</span>
+              &lt;Suspense fallback={…}&gt;
+            </div>
+            <div class="box-sub">Catches thrown promises from descendants and shows a fallback while waiting.</div>
+
+            <div class="nested">
+              <div class="box component" id="boxComponent">
+                <div class="box-title">
+                  <span class="tag">Component</span>
+                  &lt;UserProfile /&gt;
+                </div>
+                <div class="box-sub">Calls <code class="inline">use(userPromise)</code> during render.</div>
+                <div class="render-output" id="renderOut">
+                  <span id="renderOutText">Not rendered yet.</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="promise-row" id="promiseRow">
+            <div class="promise-icon" id="promiseIcon">P</div>
+            <div class="promise-meta">
+              <div class="label">userPromise</div>
+              <div class="state" id="promiseState">idle</div>
+            </div>
+          </div>
+
+          <span class="arrow" id="arrowThrow" style="left: 24px; top: 200px;">throw promise ↑</span>
+          <span class="arrow react" id="arrowResume" style="right: 24px; top: 200px;">React re-renders ↻</span>
+          <span class="arrow success" id="arrowResolve" style="left: 24px; bottom: 90px;">resolve ✓</span>
+        </div>
+
+        <!-- RIGHT: Code -->
+        <div class="pane">
+          <h3>Component code</h3>
+          <div class="code" id="codeBlock"><span class="ln" data-line="1"><span class="kw">function</span> <span class="fn">UserProfile</span>() {</span><span class="ln" data-line="2">  <span class="kw">const</span> user = <span class="fn">use</span>(userPromise);</span><span class="ln" data-line="3">  <span class="kw">return</span> &lt;<span class="fn">div</span>&gt;Hello, {user.name}&lt;/<span class="fn">div</span>&gt;;</span><span class="ln" data-line="4">}</span><span class="ln">&nbsp;</span><span class="ln" data-line="5">&lt;<span class="fn">Suspense</span> fallback={&lt;<span class="fn">Spinner</span>/&gt;}&gt;</span><span class="ln" data-line="6">  &lt;<span class="fn">UserProfile</span> /&gt;</span><span class="ln" data-line="7">&lt;/<span class="fn">Suspense</span>&gt;</span></div>
+
+          <div class="progress" id="progress"></div>
+
+          <div class="narration" id="narration">
+            <div class="step-num" id="stepNum">STEP 0 / 8</div>
+            <div class="step-text" id="stepText">Click <strong>▶ Play</strong> to start the walkthrough, or use <strong>Step</strong> to advance manually.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="controls">
+        <button id="play" class="primary">▶ Play</button>
+        <button id="prev">◂ Prev</button>
+        <button id="step">Step ▸</button>
+        <button id="reset">Reset</button>
+        <label class="speed">
+          Speed
+          <input id="speed" type="range" min="0.5" max="3" step="0.25" value="1" />
+          <span id="speedVal">1×</span>
+        </label>
+      </div>
+    </div>
+
+    <div class="explainer">
+      <div class="card">
+        <h3>Why <em>throw</em>?</h3>
+        <p>React renders are synchronous functions — they can't <code class="inline">await</code>. Throwing is the one mechanism that lets a function abort mid-execution and hand control back to whoever called it. React abuses this: <code class="inline">use()</code> throws the pending promise so React's render loop can catch it.</p>
+      </div>
+      <div class="card">
+        <h3>Suspense is a <code class="inline">try/catch</code></h3>
+        <p>Conceptually, every <code class="inline">&lt;Suspense&gt;</code> boundary wraps its children in a try/catch. If the caught value is a thenable (a promise), Suspense renders the fallback and attaches a <code class="inline">.then()</code> to know when to retry.</p>
+      </div>
+      <div class="card">
+        <h3>Re-render, don't resume</h3>
+        <p>When the promise resolves, React doesn't magically resume the half-finished function. It calls the component <em>from scratch</em>. The second time, <code class="inline">use()</code> sees a fulfilled promise and returns its value synchronously — no throw this time.</p>
+      </div>
+      <div class="card">
+        <h3>Cache the promise</h3>
+        <p>Because the component re-runs on every render, the promise must be stable across renders (cached, memoized, or passed in as a prop). Creating <code class="inline">fetch(...)</code> inline every render starts a new request every time and never resolves consistently.</p>
+      </div>
+    </div>
+
+    <footer class="foot">
+      Part of the <a href="../index.html">teaching materials</a> wiki.
+    </footer>
+  </div>
+
+<script>
+(() => {
+  // ---------- Step definitions ----------
+  // Each step describes what to highlight and what to say.
+  const STEPS = [
+    {
+      num: "STEP 1 / 8",
+      text: "React starts rendering the tree. It enters <code>&lt;Suspense&gt;</code> and recurses into <code>&lt;UserProfile /&gt;</code>.",
+      highlightLines: [5, 6],
+      activeBox: "suspense",
+      promise: "idle",
+      renderText: "Rendering…",
+      renderClass: "",
+    },
+    {
+      num: "STEP 2 / 8",
+      text: "<code>UserProfile()</code> begins executing. It hits the line <code>const user = use(userPromise)</code>.",
+      highlightLines: [1, 2],
+      activeBox: "component",
+      promise: "pending",
+      promiseLabel: "pending — fetching user data",
+      renderText: "Calling use(promise)…",
+      renderClass: "",
+    },
+    {
+      num: "STEP 3 / 8",
+      text: "<code>use()</code> inspects the promise. Its state is <strong>pending</strong>, so <code>use()</code> cannot return a value. It <strong>throws the promise</strong>.",
+      highlightLines: [2],
+      thrownLines: [2],
+      activeBox: "component",
+      promise: "pending",
+      arrow: "throw",
+      renderText: "💥 throws userPromise",
+      renderClass: "",
+    },
+    {
+      num: "STEP 4 / 8",
+      text: "The throw unwinds the stack. <code>UserProfile</code>'s execution is abandoned — its <code>return</code> never runs.",
+      highlightLines: [],
+      activeBox: null,
+      unwound: "component",
+      promise: "pending",
+      arrow: "throw",
+      renderText: "(stack unwound — no JSX returned)",
+      renderClass: "",
+    },
+    {
+      num: "STEP 5 / 8",
+      text: "The nearest <code>&lt;Suspense&gt;</code> catches the thrown value. It sees a thenable, attaches <code>.then()</code> to it, and renders its <code>fallback</code> instead.",
+      highlightLines: [5],
+      activeBox: "suspense",
+      unwound: "component",
+      promise: "pending",
+      renderText: "Spinner (fallback)",
+      renderClass: "fallback",
+      showSpinner: true,
+    },
+    {
+      num: "STEP 6 / 8",
+      text: "Time passes. The fetch completes — the promise <strong>resolves</strong> with the user data.",
+      highlightLines: [],
+      activeBox: null,
+      unwound: "component",
+      promise: "fulfilled",
+      promiseLabel: "fulfilled — { name: 'Ada' }",
+      arrow: "resolve",
+      renderText: "Spinner (fallback)",
+      renderClass: "fallback",
+      showSpinner: true,
+    },
+    {
+      num: "STEP 7 / 8",
+      text: "The <code>.then()</code> callback fires. React schedules a <strong>re-render</strong> of the suspended subtree — calling <code>UserProfile()</code> again from scratch.",
+      highlightLines: [1, 2],
+      activeBox: "component",
+      promise: "fulfilled",
+      arrow: "resume",
+      renderText: "Re-rendering…",
+      renderClass: "",
+    },
+    {
+      num: "STEP 8 / 8",
+      text: "<code>use()</code> reads the now-fulfilled promise and returns the value <strong>synchronously</strong>. No throw this time. The component returns its JSX.",
+      highlightLines: [2, 3],
+      activeBox: "component",
+      promise: "fulfilled",
+      renderText: "Hello, Ada",
+      renderClass: "success",
+    },
+  ];
+
+  // ---------- DOM refs ----------
+  const playBtn  = document.getElementById("play");
+  const prevBtn  = document.getElementById("prev");
+  const stepBtn  = document.getElementById("step");
+  const resetBtn = document.getElementById("reset");
+  const speedEl  = document.getElementById("speed");
+  const speedVal = document.getElementById("speedVal");
+
+  const stepNum  = document.getElementById("stepNum");
+  const stepText = document.getElementById("stepText");
+  const codeBlock = document.getElementById("codeBlock");
+  const progressEl = document.getElementById("progress");
+
+  const boxSuspense = document.getElementById("boxSuspense");
+  const boxComponent = document.getElementById("boxComponent");
+  const renderOut = document.getElementById("renderOut");
+  const renderOutText = document.getElementById("renderOutText");
+
+  const promiseIcon = document.getElementById("promiseIcon");
+  const promiseState = document.getElementById("promiseState");
+
+  const arrowThrow   = document.getElementById("arrowThrow");
+  const arrowResume  = document.getElementById("arrowResume");
+  const arrowResolve = document.getElementById("arrowResolve");
+
+  // Build progress dots
+  STEPS.forEach(() => {
+    const d = document.createElement("div");
+    d.className = "dot";
+    progressEl.appendChild(d);
+  });
+  const dots = [...progressEl.children];
+
+  // ---------- State ----------
+  let idx = -1;       // current step index (-1 = nothing yet)
+  let playing = false;
+  let timer = null;
+
+  function speed() { return parseFloat(speedEl.value) || 1; }
+  function stepDelay() { return 2200 / speed(); }
+  speedEl.addEventListener("input", () => {
+    speedVal.textContent = speed() + "×";
+  });
+
+  // ---------- Rendering a step ----------
+  function clearHighlights() {
+    codeBlock.querySelectorAll(".ln").forEach(el => el.classList.remove("hl", "thrown"));
+    boxSuspense.classList.remove("active", "dim");
+    boxComponent.classList.remove("active", "dim", "unwound");
+    arrowThrow.classList.remove("visible");
+    arrowResume.classList.remove("visible");
+    arrowResolve.classList.remove("visible");
+  }
+
+  function setPromise(stateName, customLabel) {
+    promiseIcon.classList.remove("pending", "fulfilled", "rejected");
+    if (stateName === "pending")   { promiseIcon.classList.add("pending");   promiseIcon.textContent = "⌛"; }
+    else if (stateName === "fulfilled") { promiseIcon.classList.add("fulfilled"); promiseIcon.textContent = "✓"; }
+    else if (stateName === "rejected")  { promiseIcon.classList.add("rejected");  promiseIcon.textContent = "✗"; }
+    else { promiseIcon.textContent = "P"; }
+
+    if (customLabel) {
+      promiseState.textContent = customLabel;
+    } else {
+      promiseState.textContent = stateName;
+    }
+  }
+
+  function applyStep(i) {
+    clearHighlights();
+    if (i < 0) {
+      stepNum.textContent = "STEP 0 / " + STEPS.length;
+      stepText.innerHTML = "Click <strong>▶ Play</strong> to start the walkthrough, or use <strong>Step</strong> to advance manually.";
+      renderOut.className = "render-output";
+      renderOutText.textContent = "Not rendered yet.";
+      setPromise("idle");
+      dots.forEach(d => d.classList.remove("done", "current"));
+      return;
+    }
+
+    const s = STEPS[i];
+    stepNum.textContent = s.num;
+    stepText.innerHTML = s.text;
+
+    // code highlighting
+    (s.highlightLines || []).forEach(n => {
+      const el = codeBlock.querySelector(`.ln[data-line="${n}"]`);
+      if (el) el.classList.add("hl");
+    });
+    (s.thrownLines || []).forEach(n => {
+      const el = codeBlock.querySelector(`.ln[data-line="${n}"]`);
+      if (el) { el.classList.remove("hl"); el.classList.add("thrown"); }
+    });
+
+    // active boxes
+    if (s.activeBox === "suspense") boxSuspense.classList.add("active");
+    if (s.activeBox === "component") boxComponent.classList.add("active");
+    if (s.unwound === "component") boxComponent.classList.add("unwound");
+
+    // promise state
+    setPromise(s.promise, s.promiseLabel);
+
+    // arrows
+    if (s.arrow === "throw")   arrowThrow.classList.add("visible");
+    if (s.arrow === "resolve") arrowResolve.classList.add("visible");
+    if (s.arrow === "resume")  arrowResume.classList.add("visible");
+
+    // render output
+    renderOut.className = "render-output" + (s.renderClass ? " " + s.renderClass : "");
+    if (s.showSpinner) {
+      renderOutText.innerHTML = '<span class="spinner"></span> ' + s.renderText;
+    } else {
+      renderOutText.textContent = s.renderText;
+    }
+
+    // progress dots
+    dots.forEach((d, k) => {
+      d.classList.remove("done", "current");
+      if (k < i) d.classList.add("done");
+      if (k === i) d.classList.add("current");
+    });
+  }
+
+  // ---------- Controls ----------
+  function next() {
+    if (idx >= STEPS.length - 1) {
+      stopPlay();
+      playBtn.textContent = "▶ Replay";
+      return false;
+    }
+    idx++;
+    applyStep(idx);
+    updateButtons();
+    return true;
+  }
+
+  function prev() {
+    if (idx <= -1) return;
+    idx--;
+    applyStep(idx);
+    updateButtons();
+  }
+
+  function reset() {
+    stopPlay();
+    idx = -1;
+    applyStep(idx);
+    playBtn.textContent = "▶ Play";
+    updateButtons();
+  }
+
+  function startPlay() {
+    if (playing) return;
+    if (idx >= STEPS.length - 1) { idx = -1; }
+    playing = true;
+    playBtn.textContent = "⏸ Pause";
+    updateButtons();
+    const tick = () => {
+      if (!playing) return;
+      const advanced = next();
+      if (!advanced) return;
+      timer = setTimeout(tick, stepDelay());
+    };
+    // immediate first step
+    tick();
+  }
+
+  function stopPlay() {
+    playing = false;
+    if (timer) { clearTimeout(timer); timer = null; }
+    playBtn.textContent = idx >= STEPS.length - 1 ? "▶ Replay" : "▶ Play";
+    updateButtons();
+  }
+
+  function updateButtons() {
+    prevBtn.disabled = idx <= 0 || playing;
+    stepBtn.disabled = idx >= STEPS.length - 1 || playing;
+  }
+
+  playBtn.addEventListener("click", () => {
+    if (playing) stopPlay();
+    else startPlay();
+  });
+  prevBtn.addEventListener("click", () => { if (!playing) prev(); });
+  stepBtn.addEventListener("click", () => { if (!playing) next(); });
+  resetBtn.addEventListener("click", reset);
+
+  // initial
+  applyStep(-1);
+  updateButtons();
+})();
+</script>
+</body>
+</html>
