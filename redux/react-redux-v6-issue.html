@@ -96,6 +96,16 @@
         border-bottom: 1px solid var(--cp-border);
         padding-bottom: 24px;
       }
+      .back {
+        display: inline-block;
+        color: var(--cp-text-muted);
+        text-decoration: none;
+        font-size: 0.9rem;
+        margin-bottom: 16px;
+      }
+      .back:hover {
+        color: var(--cp-accent);
+      }
       .eyebrow {
         color: var(--cp-accent);
         font-size: 0.85rem;
@@ -464,6 +474,7 @@
     <button class="theme-toggle" id="themeToggle">Toggle theme</button>
 
     <div class="wrap">
+      <a class="back" href="../index.html">&larr; All lessons</a>
       <header>
         <div class="eyebrow">React-Redux · Performance Deep-Dive</div>
         <h1>Why React-Redux v6 Was Slower Than v5 (and v7 Fixed It)</h1>

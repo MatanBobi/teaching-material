@@ -88,6 +88,14 @@
     padding: 32px 24px 72px;
   }
   header { margin-bottom: 24px; }
+  .back {
+    display: inline-block;
+    color: var(--cp-text-muted);
+    text-decoration: none;
+    font-size: 0.9rem;
+    margin-bottom: 16px;
+  }
+  .back:hover { color: var(--cp-accent); }
   .eyebrow {
     color: var(--cp-accent);
     font-size: 0.8rem;
@@ -301,6 +309,7 @@
 
 <div class="wrap">
 
+<a class="back" href="../index.html">&larr; All lessons</a>
 <header>
   <div class="eyebrow">Redux · Interactive Data Flow</div>
   <h1>The Redux Cycle: UI → Action → Reducer → State → UI</h1>
