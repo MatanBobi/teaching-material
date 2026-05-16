@@ -1,0 +1,955 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>React Server Components: a visual tour</title>
+<meta name="description" content="An interactive diagram of a typical app split between Server Components and Client Components. Click any part of the UI to see what runs where, and why." />
+
+<script>
+  (() => {
+    const theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    document.documentElement.setAttribute("data-theme", theme);
+  })();
+</script>
+
+<style>
+  :root {
+    color-scheme: light;
+    --cp-bg: #f7f4ef;
+    --cp-bg-elevated: #fcfbf8;
+    --cp-surface: #ffffff;
+    --cp-surface-soft: #f5f5f5;
+    --cp-border: #dedede;
+    --cp-border-strong: #919191;
+    --cp-text: #242424;
+    --cp-text-muted: #5c5c5c;
+    --cp-text-soft: #6f6f6f;
+    --cp-accent: #b11f4b;
+    --cp-accent-hover: #9a1a41;
+    --cp-accent-soft: rgba(177, 31, 75, 0.08);
+    --cp-accent-fg: #ffffff;
+    --cp-shadow: 0 18px 48px rgba(0, 0, 0, 0.12);
+    --cp-link: #0078d4;
+
+    --server: #a855f7;
+    --server-soft: rgba(168, 85, 247, 0.12);
+    --server-strong: rgba(168, 85, 247, 0.55);
+    --client: #3b82f6;
+    --client-soft: rgba(59, 130, 246, 0.12);
+    --client-strong: rgba(59, 130, 246, 0.55);
+
+    --mock-bg: #1c1c24;
+    --mock-surface: #26262f;
+    --mock-surface-soft: #2d2d38;
+    --mock-bar: #3a3a48;
+    --mock-bar-soft: #34343f;
+  }
+  html[data-theme="dark"] {
+    color-scheme: dark;
+    --cp-bg: #3d3b3a;
+    --cp-bg-elevated: #343231;
+    --cp-surface: #292929;
+    --cp-surface-soft: #2e2e2e;
+    --cp-border: #474747;
+    --cp-border-strong: #5f5f5f;
+    --cp-text: #dedede;
+    --cp-text-muted: #919191;
+    --cp-text-soft: #b0b0b0;
+    --cp-accent: #fd8ea1;
+    --cp-accent-hover: #fb7b91;
+    --cp-accent-soft: rgba(253, 142, 161, 0.14);
+    --cp-accent-fg: #1a1a1a;
+    --cp-shadow: 0 18px 48px rgba(0, 0, 0, 0.32);
+    --cp-link: #4da6ff;
+
+    --server: #c084fc;
+    --server-soft: rgba(192, 132, 252, 0.18);
+    --server-strong: rgba(192, 132, 252, 0.65);
+    --client: #60a5fa;
+    --client-soft: rgba(96, 165, 250, 0.18);
+    --client-strong: rgba(96, 165, 250, 0.65);
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--cp-bg);
+    color: var(--cp-text);
+    font-family: "Segoe UI", Aptos, Calibri, -apple-system, BlinkMacSystemFont, sans-serif;
+    line-height: 1.5;
+    min-height: 100vh;
+  }
+  a { color: var(--cp-link); }
+  .wrap {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 48px 24px 96px;
+  }
+  header { margin-bottom: 32px; }
+  .eyebrow {
+    color: var(--cp-accent);
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin: 0 0 8px;
+  }
+  .back {
+    display: inline-block;
+    color: var(--cp-text-muted);
+    text-decoration: none;
+    font-size: 0.9rem;
+    margin-bottom: 16px;
+  }
+  .back:hover { color: var(--cp-accent); }
+  h1 {
+    font-size: 2rem;
+    margin: 0 0 12px;
+    letter-spacing: -0.01em;
+  }
+  .lede {
+    color: var(--cp-text-muted);
+    margin: 0;
+    font-size: 1.05rem;
+    max-width: 64ch;
+  }
+
+  /* Controls */
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 24px 0 16px;
+    align-items: center;
+  }
+  .filter-btn {
+    appearance: none;
+    border: 1px solid var(--cp-border);
+    background: var(--cp-surface);
+    color: var(--cp-text);
+    padding: 8px 14px;
+    border-radius: 999px;
+    font: inherit;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .filter-btn:hover { border-color: var(--cp-border-strong); }
+  .filter-btn[aria-pressed="true"][data-filter="all"] {
+    border-color: var(--cp-accent);
+    background: var(--cp-accent-soft);
+    color: var(--cp-accent);
+  }
+  .filter-btn[aria-pressed="true"][data-filter="server"] {
+    border-color: var(--server);
+    background: var(--server-soft);
+    color: var(--server);
+  }
+  .filter-btn[aria-pressed="true"][data-filter="client"] {
+    border-color: var(--client);
+    background: var(--client-soft);
+    color: var(--client);
+  }
+  .legend-dot {
+    width: 16px; height: 16px;
+    border-radius: 4px;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 0.7rem; font-weight: 700;
+    color: white;
+  }
+  .legend-dot.s { background: var(--server); }
+  .legend-dot.c { background: var(--client); }
+
+  /* Layout: diagram + details */
+  .stage {
+    display: grid;
+    grid-template-columns: minmax(0, 1.5fr) minmax(280px, 1fr);
+    gap: 24px;
+    align-items: start;
+  }
+  @media (max-width: 880px) {
+    .stage { grid-template-columns: 1fr; }
+  }
+
+  /* Browser mock */
+  .browser {
+    background: var(--mock-bg);
+    border-radius: 16px;
+    padding: 14px;
+    box-shadow: var(--cp-shadow);
+    color: #e7e7ef;
+  }
+  .browser-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 4px 6px 12px;
+  }
+  .dots { display: flex; gap: 6px; }
+  .dot { width: 12px; height: 12px; border-radius: 50%; }
+  .dot.r { background: #ff5f57; }
+  .dot.y { background: #febc2e; }
+  .dot.g { background: #28c840; }
+  .addr {
+    flex: 1;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 8px;
+    padding: 6px 12px;
+    font-size: 0.85rem;
+    color: #cfd0d8;
+    text-align: center;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+
+  .app {
+    display: grid;
+    grid-template-columns: 1fr 1.5fr;
+    grid-template-rows: auto 1fr;
+    grid-template-areas:
+      "nav nav"
+      "side main";
+    gap: 14px;
+    padding: 6px;
+  }
+
+  /* Components */
+  .comp {
+    position: relative;
+    border-radius: 12px;
+    padding: 14px;
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.2s ease, outline-color 0.15s ease;
+    outline: 2px solid transparent;
+    outline-offset: 2px;
+  }
+  .comp:focus-visible { outline-color: var(--cp-accent); }
+  .comp.server {
+    background: var(--server-soft);
+    border: 1.5px solid var(--server-strong);
+  }
+  .comp.client {
+    background: var(--client-soft);
+    border: 1.5px solid var(--client-strong);
+  }
+  .comp .tag {
+    position: absolute;
+    top: -10px;
+    left: 10px;
+    width: 22px; height: 22px;
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: white;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+  }
+  .comp.server > .tag { background: var(--server); }
+  .comp.client > .tag { background: var(--client); }
+  .comp:hover { transform: translateY(-1px); }
+  .comp.is-active {
+    box-shadow: 0 0 0 3px var(--cp-accent), 0 12px 30px rgba(0,0,0,0.35);
+  }
+
+  .stage[data-filter="server"] .comp.client,
+  .stage[data-filter="client"] .comp.server {
+    opacity: 0.18;
+    filter: grayscale(0.4);
+  }
+
+  .navbar { grid-area: nav; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .navbar .logo {
+    width: 32px; height: 32px; border-radius: 50%;
+    background: var(--mock-bar);
+  }
+  .sidebar { grid-area: side; display: flex; flex-direction: column; gap: 10px; min-height: 280px; }
+  .main    { grid-area: main; display: flex; flex-direction: column; gap: 14px; }
+
+  .bar {
+    height: 12px;
+    border-radius: 6px;
+    background: var(--mock-bar);
+  }
+  .bar.short { width: 50%; }
+  .bar.long  { width: 88%; }
+  .bar.full  { width: 100%; }
+
+  .search {
+    width: 220px; max-width: 60%;
+    height: 28px;
+    border-radius: 8px;
+    background: var(--mock-bar-soft);
+  }
+
+  /* Cards inside main */
+  .card {
+    display: grid;
+    grid-template-columns: 56px 1fr;
+    gap: 12px;
+    align-items: center;
+    padding: 10px;
+    border-radius: 10px;
+    background: rgba(255,255,255,0.03);
+  }
+  .thumb {
+    width: 56px; height: 56px;
+    border-radius: 8px;
+    background: var(--mock-bar);
+    display: flex; align-items: center; justify-content: center;
+    color: rgba(255,255,255,0.5);
+    font-size: 1.4rem;
+  }
+  .card-body { display: flex; flex-direction: column; gap: 8px; }
+  .btn-mock {
+    height: 22px;
+    width: 110px;
+    border-radius: 6px;
+    background: var(--mock-bar);
+  }
+
+  /* Details panel */
+  .details {
+    position: sticky;
+    top: 24px;
+    background: var(--cp-surface);
+    border: 1px solid var(--cp-border);
+    border-radius: 16px;
+    padding: 22px;
+    box-shadow: var(--cp-shadow);
+  }
+  .details .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 4px 10px;
+    border-radius: 999px;
+  }
+  .details .pill.server { background: var(--server-soft); color: var(--server); border: 1px solid var(--server-strong); }
+  .details .pill.client { background: var(--client-soft); color: var(--client); border: 1px solid var(--client-strong); }
+  .details h2 { margin: 12px 0 8px; font-size: 1.3rem; }
+  .details .desc { margin: 0 0 14px; color: var(--cp-text-muted); }
+  .details h3 {
+    margin: 14px 0 6px;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--cp-text-muted);
+  }
+  .details ul { margin: 0; padding-left: 18px; }
+  .details li { margin: 4px 0; }
+  .details .hint {
+    margin-top: 14px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: var(--cp-surface-soft);
+    border: 1px dashed var(--cp-border);
+    color: var(--cp-text-muted);
+    font-size: 0.9rem;
+  }
+
+  /* Bottom explainer */
+  .explain {
+    margin-top: 40px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  @media (max-width: 720px) { .explain { grid-template-columns: 1fr; } }
+  .card-box {
+    background: var(--cp-surface);
+    border: 1px solid var(--cp-border);
+    border-radius: 14px;
+    padding: 18px;
+  }
+  .card-box h3 { margin: 0 0 8px; font-size: 1rem; display: flex; align-items: center; gap: 8px; }
+  .card-box p { margin: 0 0 8px; color: var(--cp-text-muted); font-size: 0.95rem; }
+  code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    background: var(--cp-surface-soft);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 0.88em;
+  }
+
+  /* Network boundary section */
+  .boundary-section { margin-top: 56px; }
+  .boundary-section h2 {
+    margin: 0 0 8px;
+    font-size: 1.5rem;
+    letter-spacing: -0.01em;
+  }
+  .boundary-section .intro {
+    margin: 0 0 20px;
+    color: var(--cp-text-muted);
+    max-width: 70ch;
+  }
+  .mode-switch {
+    display: inline-flex;
+    background: var(--cp-surface);
+    border: 1px solid var(--cp-border);
+    border-radius: 999px;
+    padding: 4px;
+    gap: 4px;
+    margin-bottom: 16px;
+  }
+  .mode-switch button {
+    appearance: none;
+    border: 0;
+    background: transparent;
+    color: var(--cp-text-muted);
+    padding: 8px 16px;
+    border-radius: 999px;
+    font: inherit;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .mode-switch button[aria-pressed="true"] {
+    background: var(--cp-accent);
+    color: var(--cp-accent-fg);
+  }
+
+  .tree-stage {
+    background: var(--mock-bg);
+    border-radius: 16px;
+    padding: 28px 20px 20px;
+    position: relative;
+    overflow: hidden;
+    box-shadow: var(--cp-shadow);
+  }
+  .tree-label {
+    position: absolute;
+    top: 14px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: #f4a89a;
+    text-align: center;
+    line-height: 1.2;
+    transition: opacity 0.3s ease;
+    pointer-events: none;
+  }
+  .tree-stage[data-mode="rsc"] .tree-label.ssr-label { opacity: 0; }
+  .tree-stage[data-mode="ssr"] .tree-label.rsc-label { opacity: 0; }
+  .tree-stage[data-mode="rsc"] .tree-label.rsc-label,
+  .tree-stage[data-mode="ssr"] .tree-label.ssr-label {
+    opacity: 1;
+  }
+  .tree-label { opacity: 0; }
+
+  .boundary-wrap {
+    position: relative;
+    padding: 36px 18px 18px;
+    border-radius: 12px;
+    transition: outline 0.3s ease, padding 0.3s ease;
+    outline: 2px dashed transparent;
+    outline-offset: -2px;
+  }
+  .tree-stage[data-mode="ssr"] .boundary-wrap {
+    outline-color: #f4a89a;
+  }
+  /* In RSC mode, individual client component boundaries get the dashed outline */
+  .tree-stage[data-mode="rsc"] .node[data-kind="client"] {
+    outline: 2px dashed #f4a89a;
+    outline-offset: 6px;
+  }
+
+  .tree-container {
+    position: relative;
+    width: 100%;
+  }
+  .tree-svg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+  }
+  .tree-svg line {
+    stroke: rgba(255,255,255,0.45);
+    stroke-width: 2;
+  }
+  .tree-nodes {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+    color: #1c1c24;
+  }
+  .tree-level {
+    display: flex;
+    justify-content: center;
+    width: 100%;
+    padding: 14px 0;
+  }
+  .tree-level-row {
+    display: flex;
+    justify-content: center;
+    gap: 32px;
+  }
+  .tree-subtree {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+  }
+  .node {
+    background: var(--server-soft);
+    color: var(--cp-text);
+    border: 1.5px solid var(--server-strong);
+    padding: 10px 22px;
+    border-radius: 12px;
+    font-weight: 600;
+    font-size: 0.95rem;
+    min-width: 110px;
+    text-align: center;
+    box-shadow: 0 2px 0 rgba(0,0,0,0.2);
+    position: relative;
+    transition: background 0.3s ease, color 0.3s ease, outline-color 0.3s ease;
+    outline: 2px dashed transparent;
+    outline-offset: 6px;
+  }
+  .node[data-kind="client"] {
+    background: var(--client-soft);
+    border-color: var(--client-strong);
+  }
+  /* In SSR mode, all nodes look the same (everything ships to client) */
+  .tree-stage[data-mode="ssr"] .node,
+  .tree-stage[data-mode="ssr"] .node[data-kind="client"] {
+    background: var(--server-soft);
+    border-color: var(--server-strong);
+  }
+
+  .tree-caption {
+    margin-top: 18px;
+    padding: 14px 16px;
+    background: rgba(255,255,255,0.04);
+    border-radius: 10px;
+    color: #d8d8e2;
+    font-size: 0.95rem;
+    line-height: 1.55;
+  }
+  .tree-caption strong { color: #f4a89a; }
+
+  .legend-row {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-top: 10px;
+    color: #c8c8d2;
+    font-size: 0.85rem;
+  }
+  .legend-row span {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .swatch {
+    width: 14px; height: 14px;
+    border-radius: 3px;
+    display: inline-block;
+  }
+  .swatch.s { background: var(--server); }
+  .swatch.c { background: var(--client); }
+  .swatch.boundary {
+    background: transparent;
+    border: 2px dashed #f4a89a;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="../index.html">&larr; All lessons</a>
+  <header>
+    <p class="eyebrow">React</p>
+    <h1>React Server Components: a visual tour</h1>
+    <p class="lede">
+      In the React Server Components model, your tree is split between parts that render on the server and parts that hydrate and run in the browser.
+      Click any region of the mock app to see what runs where &mdash; and why.
+    </p>
+  </header>
+
+  <div class="controls" role="group" aria-label="Filter components">
+    <button class="filter-btn" data-filter="all" aria-pressed="true">Show all</button>
+    <button class="filter-btn" data-filter="server" aria-pressed="false">
+      <span class="legend-dot s">S</span> Server only
+    </button>
+    <button class="filter-btn" data-filter="client" aria-pressed="false">
+      <span class="legend-dot c">C</span> Client only
+    </button>
+  </div>
+
+  <div class="stage" data-filter="all">
+    <div class="browser" aria-label="Mock browser window">
+      <div class="browser-bar">
+        <div class="dots"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span></div>
+        <div class="addr">&#128274;&nbsp; acme.com</div>
+      </div>
+
+      <div class="app">
+        <div class="comp server navbar" tabindex="0" role="button" data-id="navbar"
+             aria-label="Navbar — Server Component. Contains Search, a Client Component.">
+          <span class="tag" aria-hidden="true">S</span>
+          <div class="logo"></div>
+          <div class="comp client" tabindex="0" role="button" data-id="search"
+               aria-label="Search — Client Component"
+               style="padding: 6px 10px;">
+            <span class="tag" aria-hidden="true">C</span>
+            <div class="search"></div>
+          </div>
+        </div>
+
+        <div class="comp server sidebar" tabindex="0" role="button" data-id="sidebar"
+             aria-label="Sidebar — Server Component">
+          <span class="tag" aria-hidden="true">S</span>
+          <div class="bar long"></div>
+          <div class="bar short"></div>
+          <div class="bar long"></div>
+          <div class="bar short"></div>
+        </div>
+
+        <div class="comp server main" tabindex="0" role="button" data-id="main"
+             aria-label="Main — Server Component. Contains Buttons, which are Client Components.">
+          <span class="tag" aria-hidden="true">S</span>
+
+          <div class="card">
+            <div class="thumb">&#128247;</div>
+            <div class="card-body">
+              <div class="bar full"></div>
+              <div class="comp client" tabindex="0" role="button" data-id="button"
+                   aria-label="Button — Client Component"
+                   style="padding: 4px 8px; width: 130px;">
+                <span class="tag" aria-hidden="true">C</span>
+                <div class="btn-mock"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="thumb">&#128247;</div>
+            <div class="card-body">
+              <div class="bar full"></div>
+              <div class="comp client" tabindex="0" role="button" data-id="button"
+                   aria-label="Button — Client Component"
+                   style="padding: 4px 8px; width: 130px;">
+                <span class="tag" aria-hidden="true">C</span>
+                <div class="btn-mock"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="thumb">&#128247;</div>
+            <div class="card-body">
+              <div class="bar full"></div>
+              <div class="comp client" tabindex="0" role="button" data-id="button"
+                   aria-label="Button — Client Component"
+                   style="padding: 4px 8px; width: 130px;">
+                <span class="tag" aria-hidden="true">C</span>
+                <div class="btn-mock"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <aside class="details" id="details" aria-live="polite">
+      <span class="pill server" id="pill">Server Component</span>
+      <h2 id="title">Pick a component</h2>
+      <p class="desc" id="desc">Tap or click any boxed region inside the mock app. Purple frames are Server Components; blue frames are Client Components.</p>
+
+      <h3>Where it runs</h3>
+      <ul id="runs">
+        <li>Server Components render on the server during the request.</li>
+        <li>Client Components render in the browser (and during SSR for the initial HTML).</li>
+      </ul>
+
+      <h3>Why this matters</h3>
+      <ul id="why">
+        <li>Server Components ship <strong>zero JavaScript</strong> to the client.</li>
+        <li>Client Components are needed for interactivity, state, effects, and browser-only APIs.</li>
+      </ul>
+
+      <div class="hint">Tip: A Server Component can import and render a Client Component, but not the other way around — a Client Component can only receive Client Components as children via composition.</div>
+    </aside>
+  </div>
+
+  <section class="explain">
+    <div class="card-box">
+      <h3><span class="legend-dot s">S</span> Server Components</h3>
+      <p>Run on the server. They can <code>async/await</code> directly, hit databases, read files, and access secrets. Their output is serialized and streamed to the browser.</p>
+      <p>They are <strong>not interactive</strong> — no <code>useState</code>, no <code>useEffect</code>, no event handlers, no browser APIs.</p>
+    </div>
+    <div class="card-box">
+      <h3><span class="legend-dot c">C</span> Client Components</h3>
+      <p>Marked with the <code>"use client"</code> directive at the top of the file. They run in the browser and, during SSR, on the server to produce initial HTML.</p>
+      <p>Use them whenever you need state, effects, refs, event handlers, or browser-only APIs like <code>window</code> or <code>localStorage</code>.</p>
+    </div>
+  </section>
+
+  <section class="boundary-section" id="boundary">
+    <h2>The Network Boundary</h2>
+    <p class="intro">
+      In traditional SSR, the server renders HTML and then ships <em>every</em> component's JavaScript to the browser to hydrate it. The whole tree crosses the network boundary.
+      With React Server Components, the boundary moves inward: only the components marked <code>"use client"</code> need to ship JavaScript. Everything else stays on the server.
+    </p>
+
+    <div class="mode-switch" role="group" aria-label="Rendering mode">
+      <button type="button" data-mode="ssr" aria-pressed="true">Traditional SSR</button>
+      <button type="button" data-mode="rsc" aria-pressed="false">React Server Components</button>
+    </div>
+
+    <div class="tree-stage" data-mode="ssr" id="treeStage">
+      <div class="tree-label ssr-label">Network<br />Boundary</div>
+      <div class="tree-label rsc-label">Network Boundaries</div>
+
+      <div class="boundary-wrap">
+        <div class="tree-container">
+          <svg class="tree-svg" id="treeSvg"></svg>
+          <div class="tree-nodes" id="treeNodes" aria-label="Component tree for the example app">
+
+            <div class="tree-level">
+              <div class="node" data-kind="server" id="n-layout">Layout</div>
+            </div>
+
+            <div class="tree-level">
+              <div class="tree-level-row">
+                <div class="tree-subtree">
+                  <div class="node" data-kind="server" id="n-navbar">Navbar</div>
+                  <div class="tree-level">
+                    <div class="tree-level-row" style="gap: 18px;">
+                      <div class="node" data-kind="server" id="n-logo">Logo</div>
+                      <div class="node" data-kind="client" id="n-search">Search</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="tree-subtree">
+                  <div class="node" data-kind="server" id="n-main">Main</div>
+                  <div class="tree-level">
+                    <div class="node" data-kind="server" id="n-card">Card</div>
+                  </div>
+                  <div class="tree-level">
+                    <div class="node" data-kind="client" id="n-button">Button</div>
+                  </div>
+                </div>
+
+                <div class="tree-subtree">
+                  <div class="node" data-kind="server" id="n-sidebar">Sidebar</div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+      <div class="legend-row">
+        <span><span class="swatch s"></span> Server Component</span>
+        <span><span class="swatch c"></span> Client Component</span>
+        <span><span class="swatch boundary"></span> Network boundary</span>
+      </div>
+
+      <div class="tree-caption" id="treeCaption">
+        <strong>Traditional SSR:</strong> the boundary wraps the entire tree. Every component &mdash; <code style="color:#1c1c24;background:#e7e7ef;">Layout</code>, <code style="color:#1c1c24;background:#e7e7ef;">Navbar</code>, <code style="color:#1c1c24;background:#e7e7ef;">Sidebar</code>, <code style="color:#1c1c24;background:#e7e7ef;">Main</code>, <code style="color:#1c1c24;background:#e7e7ef;">Card</code>, <code style="color:#1c1c24;background:#e7e7ef;">Logo</code>, plus the interactive ones &mdash; gets serialized as HTML <em>and</em> shipped to the browser as JavaScript for hydration.
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+  const DETAILS = {
+    navbar: {
+      kind: "server",
+      title: "Navbar",
+      desc: "A top-level layout region. It renders branding and hosts the Search input. The wrapper itself is static markup — no event handlers, no state — so it stays on the server.",
+      runs: [
+        "Renders on the server during the request.",
+        "Ships zero JavaScript for its own markup.",
+        "Composes a Client Component (Search) as a child."
+      ],
+      why: [
+        "Layouts are an ideal place to default to Server Components.",
+        "Only the small interactive island (Search) needs to be a Client Component."
+      ]
+    },
+    sidebar: {
+      kind: "server",
+      title: "Sidebar",
+      desc: "A list of navigation entries fetched at request time. No interactivity beyond regular <a> links, so it stays on the server.",
+      runs: [
+        "Can fetch data directly with await — no useEffect, no client-side fetching.",
+        "Renders to HTML/RSC payload on the server."
+      ],
+      why: [
+        "Server Components can talk to the database directly.",
+        "Saves bundle size: no list-rendering code shipped to the client."
+      ]
+    },
+    main: {
+      kind: "server",
+      title: "Main",
+      desc: "The content area. It renders cards from data fetched on the server. Each card embeds a small Client Component (the Button) for interactivity.",
+      runs: [
+        "Renders on the server, streaming output as data resolves.",
+        "Embeds Client Components (Buttons) via composition."
+      ],
+      why: [
+        "Most of the page can be server-rendered. Only the truly interactive bits cross the boundary.",
+        "This is the canonical RSC pattern: server shell + client islands."
+      ]
+    },
+    search: {
+      kind: "client",
+      title: "Search",
+      desc: "An input that responds to typing, debounces queries, and shows suggestions. It needs state, effects, and event handlers — so it must be a Client Component.",
+      runs: [
+        "Hydrates in the browser; JavaScript is shipped for it.",
+        "Marked with \"use client\" at the top of its file."
+      ],
+      why: [
+        "Anything that uses onChange, useState, or useEffect must be a Client Component.",
+        "Keep the boundary small — only the input itself, not the whole navbar."
+      ]
+    },
+    button: {
+      kind: "client",
+      title: "Button",
+      desc: "A small interactive control inside each card — for example, an \"Add to cart\" or \"Like\" button. It handles clicks and may hold local state, so it lives on the client.",
+      runs: [
+        "Ships JavaScript for the click handler and any local state.",
+        "Receives props (like id, label) from the surrounding Server Component."
+      ],
+      why: [
+        "Event handlers are not supported in Server Components.",
+        "Push interactivity to the leaves — the surrounding card and list can remain on the server."
+      ]
+    }
+  };
+
+  const stage = document.querySelector(".stage");
+  const pill = document.getElementById("pill");
+  const title = document.getElementById("title");
+  const desc = document.getElementById("desc");
+  const runs = document.getElementById("runs");
+  const why = document.getElementById("why");
+
+  function select(comp) {
+    document.querySelectorAll(".comp.is-active").forEach(el => el.classList.remove("is-active"));
+    const id = comp.dataset.id;
+    const data = DETAILS[id];
+    if (!data) return;
+    comp.classList.add("is-active");
+    pill.textContent = data.kind === "server" ? "Server Component" : "Client Component";
+    pill.className = "pill " + data.kind;
+    title.textContent = data.title;
+    desc.textContent = data.desc;
+    runs.innerHTML = data.runs.map(t => `<li>${t}</li>`).join("");
+    why.innerHTML = data.why.map(t => `<li>${t}</li>`).join("");
+  }
+
+  document.querySelectorAll(".comp[data-id]").forEach(comp => {
+    comp.addEventListener("click", (e) => {
+      e.stopPropagation();
+      select(comp);
+    });
+    comp.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        e.stopPropagation();
+        select(comp);
+      }
+    });
+  });
+
+  document.querySelectorAll(".filter-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const f = btn.dataset.filter;
+      document.querySelectorAll(".filter-btn").forEach(b => b.setAttribute("aria-pressed", b === btn ? "true" : "false"));
+      stage.dataset.filter = f;
+    });
+  });
+
+  // Network boundary mode switch
+  const treeStage = document.getElementById("treeStage");
+  const treeCaption = document.getElementById("treeCaption");
+  const modeButtons = document.querySelectorAll(".mode-switch button");
+  const CAPTIONS = {
+    ssr: `<strong>Traditional SSR:</strong> the boundary wraps the entire tree. Every component &mdash; <code style="color:#1c1c24;background:#e7e7ef;">Layout</code>, <code style="color:#1c1c24;background:#e7e7ef;">Navbar</code>, <code style="color:#1c1c24;background:#e7e7ef;">Sidebar</code>, <code style="color:#1c1c24;background:#e7e7ef;">Main</code>, <code style="color:#1c1c24;background:#e7e7ef;">Card</code>, <code style="color:#1c1c24;background:#e7e7ef;">Logo</code>, plus the interactive ones &mdash; gets serialized as HTML <em>and</em> shipped to the browser as JavaScript for hydration.`,
+    rsc: `<strong>With React Server Components:</strong> the boundary moves inward. Only <code style="color:#1c1c24;background:#e7e7ef;">Search</code> and <code style="color:#1c1c24;background:#e7e7ef;">Button</code> cross the network as JavaScript. The rest of the tree renders on the server and is sent as a serialized payload &mdash; no component code is shipped for it. The result: a much smaller bundle, with interactivity preserved exactly where it's needed.`
+  };
+  modeButtons.forEach(btn => {
+    btn.addEventListener("click", () => {
+      const mode = btn.dataset.mode;
+      modeButtons.forEach(b => b.setAttribute("aria-pressed", b === btn ? "true" : "false"));
+      treeStage.dataset.mode = mode;
+      treeCaption.innerHTML = CAPTIONS[mode];
+    });
+  });
+
+  // SVG tree connectors
+  const EDGES = [
+    ["n-layout", "n-navbar"],
+    ["n-layout", "n-main"],
+    ["n-layout", "n-sidebar"],
+    ["n-navbar", "n-logo"],
+    ["n-navbar", "n-search"],
+    ["n-main", "n-card"],
+    ["n-card", "n-button"],
+  ];
+
+  function drawTree() {
+    const svg = document.getElementById("treeSvg");
+    const container = svg.parentElement;
+    const rect = container.getBoundingClientRect();
+    svg.setAttribute("width", rect.width);
+    svg.setAttribute("height", rect.height);
+    svg.setAttribute("viewBox", `0 0 ${rect.width} ${rect.height}`);
+    svg.innerHTML = "";
+
+    for (const [parentId, childId] of EDGES) {
+      const pEl = document.getElementById(parentId);
+      const cEl = document.getElementById(childId);
+      if (!pEl || !cEl) continue;
+
+      const pRect = pEl.getBoundingClientRect();
+      const cRect = cEl.getBoundingClientRect();
+
+      const x1 = pRect.left + pRect.width / 2 - rect.left;
+      const y1 = pRect.bottom - rect.top;
+      const x2 = cRect.left + cRect.width / 2 - rect.left;
+      const y2 = cRect.top - rect.top;
+      const midY = (y1 + y2) / 2;
+
+      // Draw an elbow: down from parent, horizontal, then down to child
+      const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      path.setAttribute("d", `M${x1},${y1} L${x1},${midY} L${x2},${midY} L${x2},${y2}`);
+      path.setAttribute("fill", "none");
+      path.setAttribute("stroke", "rgba(255,255,255,0.45)");
+      path.setAttribute("stroke-width", "2");
+      svg.appendChild(path);
+    }
+  }
+
+  drawTree();
+  window.addEventListener("resize", drawTree);
+</script>
+</body>
+</html>
